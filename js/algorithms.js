@@ -231,6 +231,16 @@ export function dijkstra(graph, startId, endId, options = {}) {
  * 
  * Uzay Karmaşıklığı: O(V)
  */
+ /**
+ * ============================================================
+ * A* Algoritması - İYİLEŞTİRİLMİŞ VERSİYON
+ * ============================================================
+ * Yapılan İyileştirmeler:
+ * 1. Dinamik Başlatma (O(V) Maliyeti Kaldırıldı)
+ * 2. Güvenlik Kontrolleri (Guard Clauses)
+ * 3. Tie-Breaking Heuristic
+ * 4. Optimize Edilmiş Closed Set (Ziyaret Edilenler)
+ */
 export function aStar(graph, startId, endId, options = {}) {
     const startTime = performance.now();
 
@@ -238,29 +248,30 @@ export function aStar(graph, startId, endId, options = {}) {
     const transferPenalty = options.transferPenalty !== undefined 
         ? options.transferPenalty : 3;
 
-    // Hedef düğümün koordinatları (heuristik için)
+    // İYİLEŞTİRME 1: Güvenlik Kontrolü (Düğümler grafikte yoksa çökmeyi engelle)
+    const startVertex = graph.getVertex(startId);
     const endVertex = graph.getVertex(endId);
-    if (!endVertex) return { found: false, path: [], stats: {} };
+    if (!startVertex || !endVertex) {
+        console.warn("A* Hata: Başlangıç veya bitiş durağı bulunamadı.");
+        return { found: false, path: [], stats: {} };
+    }
 
-    // g(n): başlangıçtan n'ye olan gerçek maliyet
+    // İYİLEŞTİRME 2: Dinamik Başlatma (O(V) karmaşıklığı yaratan döngü kaldırıldı)
+    // Değerleri sadece düğümleri keşfettikçe hafızaya alıyoruz.
     const gScore = {};
-    // f(n): g(n) + h(n)
     const fScore = {};
     const prev = {};
+    
+    // İYİLEŞTİRME 4: Closed Set (Ziyaret edilen düğümleri takip ederek sonsuz döngüyü önler)
     const visited = new Set();
     const arrivedByLine = {};
 
     let nodesVisited = 0;
     let edgesExamined = 0;
 
-    // Başlangıç değerleri
-    const allVertices = graph.getAllVertices();
-    for (const v of allVertices) {
-        gScore[v.id] = Infinity;
-        fScore[v.id] = Infinity;
-    }
+    // Sadece başlangıç düğümünü başlat
     gScore[startId] = 0;
-    fScore[startId] = heuristic(graph.getVertex(startId), endVertex, criterion);
+    fScore[startId] = heuristic(startVertex, endVertex, criterion);
     arrivedByLine[startId] = null;
 
     // Min-Heap: f değerine göre sıralı
@@ -270,6 +281,7 @@ export function aStar(graph, startId, endId, options = {}) {
     while (!heap.isEmpty()) {
         const { g, nodeId, lineId } = heap.extractMin();
 
+        // Eğer bu düğümü zaten en kısa yoldan ziyaret ettiysek (Closed Set) es geç
         if (visited.has(nodeId)) continue;
         visited.add(nodeId);
         nodesVisited++;
@@ -281,15 +293,13 @@ export function aStar(graph, startId, endId, options = {}) {
 
         for (const edge of neighbors) {
             edgesExamined++;
+            
+            // Ziyaret edilmiş komşuları atla
             if (visited.has(edge.to)) continue;
 
-            let edgeCost;
-            if (criterion === 'distance') {
-                edgeCost = edge.distance;
-            } else {
-                edgeCost = edge.duration;
-            }
+            let edgeCost = criterion === 'distance' ? edge.distance : edge.duration;
 
+            // Aktarma Cezası (Hat değişiyorsa ek maliyet)
             let penalty = 0;
             if (lineId !== null && edge.lineId !== lineId) {
                 penalty = transferPenalty;
@@ -297,10 +307,16 @@ export function aStar(graph, startId, endId, options = {}) {
 
             const tentativeG = g + edgeCost + penalty;
 
-            if (tentativeG < gScore[edge.to]) {
+            // Dinamik Kontrol: Eğer düğüm henüz gScore tablosunda yoksa Infinity kabul et
+            const currentGScore = gScore[edge.to] !== undefined ? gScore[edge.to] : Infinity;
+
+            if (tentativeG < currentGScore) {
                 gScore[edge.to] = tentativeG;
+                
+                // Heuristik hesapla ve f değerini güncelle
                 const h = heuristic(graph.getVertex(edge.to), endVertex, criterion);
                 fScore[edge.to] = tentativeG + h;
+                
                 prev[edge.to] = { prevNode: nodeId, edge };
                 arrivedByLine[edge.to] = edge.lineId;
 
@@ -315,29 +331,31 @@ export function aStar(graph, startId, endId, options = {}) {
     }
 
     const endTime = performance.now();
+    const allVerticesCount = graph.getAllVertices().length;
+    
+    // Yolu yeniden oluştur
     const path = reconstructPath(prev, startId, endId, graph);
 
     return {
         path: path.stops,
         edges: path.edges,
         segments: path.segments,
-        totalCost: gScore[endId] === Infinity ? -1 : gScore[endId],
+        totalCost: gScore[endId] === undefined ? -1 : gScore[endId],
         totalDistance: path.totalDistance,
         totalDuration: path.totalDuration,
         transfers: path.transfers,
-        found: gScore[endId] !== Infinity,
+        found: gScore[endId] !== undefined,
         stats: {
-            algorithm: 'A*',
+            algorithm: 'A* (Optimize Edilmiş)',
             criterion,
             transferPenalty,
             nodesVisited,
             edgesExamined,
-            totalVertices: allVertices.length,
+            totalVertices: allVerticesCount,
             executionTimeMs: (endTime - startTime).toFixed(3)
         }
     };
 }
-
 /**
  * Heuristik Fonksiyon
  * Öklid mesafesi tabanlı tahmin
@@ -347,6 +365,9 @@ export function aStar(graph, startId, endId, options = {}) {
  *   Öklid mesafesi her zaman gerçek yol mesafesinden
  *   küçük veya eşit olduğu için kabul edilebilirdir.
  */
+ /**
+ * Heuristik Fonksiyon - İYİLEŞTİRİLMİŞ (Tie-Breaking)
+ */
 function heuristic(vertexA, vertexB, criterion) {
     if (!vertexA || !vertexB) return 0;
     
@@ -354,15 +375,17 @@ function heuristic(vertexA, vertexB, criterion) {
     const dy = vertexA.y - vertexB.y;
     const euclidean = Math.sqrt(dx * dx + dy * dy);
 
+    // İYİLEŞTİRME 3: Tie-Breaking (Eşitlik Bozucu)
+    // Maliyetleri eşit olan alternatif yollar arasında, hedefe "kuş uçuşu" en düz gideni
+    // tercih etmesini sağlamak için çok küçük bir oranla (1.001) çarpıyoruz.
+    const tieBreaker = 1.001;
+
     if (criterion === 'distance') {
-        // Doğrudan Öklid mesafesi (metre biriminde tahmin)
-        return euclidean * 0.8; // Biraz küçülterek admissibility sağlanır
+        return euclidean * 0.8 * tieBreaker; 
     } else {
-        // Mesafeyi süreye çevir (ortalama hız tahmini: 30 km/s → birim/dak)
-        return euclidean * 0.02; // Çok küçük tutarak admissibility sağlanır
+        return euclidean * 0.02 * tieBreaker; 
     }
 }
-
 /**
  * Yol Yeniden Oluşturma (Path Reconstruction)
  * Geri izleme ile başlangıçtan hedefe olan yolu oluşturur
