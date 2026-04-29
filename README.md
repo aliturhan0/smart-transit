@@ -18,29 +18,28 @@ Bu rapor, projenin ara teslim evresine kadar olan gelişimini, ekip içi iş bö
 ## 👥 Ekip Çalışması ve Branch (Şube) Yönetimi
 Proje, ekip üyelerinin uzmanlık alanlarına göre ayrıldığı profesyonel bir iş akışına sahiptir. Aşağıda ekip üyelerinin kendi branch'ları üzerindeki çalışmaları listelenmiştir:
 
-| Ekip Üyesi | Şube (Branch) | Sorumluluk Alanı / Çalışma | Durum |
+| Ekip Üyesi | Şube (Branch) | Sorumluluk Alanı / Çalışma Detayları | Durum |
 |:--- |:--- |:--- |:--- |
-| **Ali Turhan** | `main` | Proje İskeleti, UI Tasarımı ve Veri Entegrasyonu | ✅ Yayında |
-| **Mehmet Çetin** | `feature/astar-iyilestirmeleri` | A* Algoritması Performans ve Tie-breaking Optimizasyonu | ✅ Tamamlandı |
-| **Mehmet Çetin** | `feature/csharp-astar-algoritmasi` | Algoritmanın C# / Backend Porting Çalışmaları | 🚀 Yayında |
-| **Tuğçe Adışen** | `Dijkstra` | .NET 10 Backend Mimarisi, Domain Modeli ve API | 🛠️ Geliştiriliyor |
+| **Ali Turhan** | `main` | KD-Tree Uzaysal İndeksleme, Canvas API Görselleştirme, Sentetik Veri Üretici ve Proje Entegrasyonu | ✅ Yayında |
+| **Tuğçe Adışen** | `Dijkstra` | DDD Mimari Kurulumu, .NET 10 PriorityQueue Tabanlı Dijkstra Implementasyonu ve API Geliştirme | 🛠️ Geliştiriliyor |
+| **Mehmet Çetin** | `feature/csharp-astar-algoritmasi` | Algoritmanın C# / Backend Porting Çalışmaları ve Mantıksal Doğrulama | 🚀 Yayında |
 
 ---
 
 ## 🛠️ Teknik Bulgular ve Yapılan İyileştirmeler
 
-### 1. Algoritma Optimizasyonu (Mehmet Çetin)
-*   **Bulgu:** Klasik A* algoritması büyük veri setlerinde her aramada tüm düğümleri başlattığı için yavaşlıyordu.
-*   **Çözüm:** **Dynamic Initialization** ile sadece ziyaret edilen düğümlerin yönetilmesi sağlandı.
-*   **İyileştirme:** **Tie-breaking Heuristic** eklenerek hedefe giden rotaların daha doğal ve doğrusal olması sağlandı.
+### 1. Uzaysal Arama ve Görselleştirme (Ali Turhan)
+*   **KD-Tree Optimizasyonu:** 80+ durak ve karmaşık koordinat düzleminde $O(log N)$ sürede en yakın komşu araması (KNN) yapabilen 2-boyutlu ağaç yapısı optimize edildi.
+*   **Canvas API Entegrasyonu:** Büyük ölçekli graf yapılarını tarayıcıyı yormadan gerçek zamanlı render edebilen katmanlı görselleştirme motoru geliştirildi.
+*   **Veri Yönetimi:** Multigraph yapısındaki (metro, otobüs, tramvay) çakışmaları önleyen `hash-table` tabanlı durak indeksleme sistemi kuruldu.
 
-### 2. Backend Mimarisi ve API (Tuğçe Adışen)
-*   **Mimari:** Projenin gelecekteki ölçeklenebilirliği için **Domain-Driven Design (DDD)** prensiplerine uygun bir .NET 10 altyapısı kuruldu.
-*   **Algoritma:** Dijkstra algoritması, C#'ın yüksek performanslı `PriorityQueue` veri yapısı kullanılarak backend tarafında stabilize edildi.
+### 2. Kurumsal Backend Mimarisi ve Rota Planlama (Tuğçe Adışen)
+*   **DDD (Domain-Driven Design):** Projenin genişleyebilirliği için `Domain`, `Application` ve `Infrastructure` katmanlarından oluşan kurumsal mimari kuruldu.
+*   **Performanslı Dijkstra:** C# dilinin en yeni özelliklerinden biri olan `PriorityQueue<TElement, TPriority>` kullanılarak Dijkstra algoritması en verimli haliyle implement edildi.
+*   **API Altyapısı:** Frontend ile iletişim kuracak olan RESTful API servislerinin veri modelleri ve routing yapıları tasarlandı.
 
-### 3. Sistem Entegrasyonu ve Stabilite (Ali Turhan)
-*   **Veri Yapısı:** Durakların uzaysal araması için **KD-Tree** yapısı optimize edildi ve milisaniye altı arama sürelerine ulaşıldı.
-*   **Hata Yönetimi:** Çalışma zamanı hatalarını önlemek için tüm veri akışına **Guard Clause** mimarisi entegre edildi.
+### 3. Çoklu Dil ve Algoritma Taşınabilirliği (Mehmet Çetin)
+*   JavaScript tarafındaki karmaşık rota maliyet modellerinin (aktarma cezası, yürüyüş mesafesi vb.) C# ortamına hatasız aktarımı sağlandı.
 
 ---
 
