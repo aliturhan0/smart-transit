@@ -1,0 +1,136 @@
+using System;
+using System.Collections.Generic;
+
+namespace SmartTransit.BackendServices
+{
+    // A* Algoritması - İyileştirilmiş C# Versiyonu
+    public class AStarHesaplayici
+    {
+        // Temsili Graf Yapısı (Ali'nin JS'de kurduğu yapının C# karşılığı)
+        private Dictionary<string, Durak> _duraklar;
+        private Dictionary<string, List<Baglanti>> _komsulukListesi;
+
+        public AStarHesaplayici(Dictionary<string, Durak> duraklar, Dictionary<string, List<Baglanti>> komsulukListesi)
+        {
+            _duraklar = duraklar;
+            _komsulukListesi = komsulukListesi;
+        }
+
+        public List<string> EnKisaRotayiBul(string baslangicId, string hedefId, double aktarmaCezasi = 3.0)
+        {
+            // İYİLEŞTİRME 1: Guard Clause (Güvenlik Kontrolü)
+            if (!_duraklar.ContainsKey(baslangicId) || !_duraklar.ContainsKey(hedefId))
+            {
+                Console.WriteLine("Hata: Başlangıç veya bitiş durağı bulunamadı.");
+                return new List<string>();
+            }
+
+            // İYİLEŞTİRME 2: Dinamik Başlatma (O(V) Karmaşıklığı Kaldırıldı)
+            // Sadece keşfedilen düğümlerin maliyetini tutuyoruz.
+            var gMaliyeti = new Dictionary<string, double>();
+            var oncekiDurak = new Dictionary<string, string>();
+            var oncekiHat = new Dictionary<string, string>();
+
+            // İYİLEŞTİRME 3: Closed Set (Sonsuz döngüyü ve gereksiz taramaları önler)
+            var ziyaretEdilenler = new HashSet<string>();
+
+            // C# .NET 6+ yerleşik PriorityQueue yapısı
+            var minHeap = new PriorityQueue<string, double>();
+
+            gMaliyeti[baslangicId] = 0;
+            oncekiHat[baslangicId] = null;
+            minHeap.Enqueue(baslangicId, HeuristicHesapla(baslangicId, hedefId));
+
+            while (minHeap.Count > 0)
+            {
+                string guncelDurak = minHeap.Dequeue();
+
+                // Düğüm daha önce en kısa yoldan ziyaret edildiyse es geç
+                if (ziyaretEdilenler.Contains(guncelDurak)) continue;
+                ziyaretEdilenler.Add(guncelDurak);
+
+                // Hedefe ulaşıldı
+                if (guncelDurak == hedefId) break;
+
+                // Durağın komşuları yoksa atla
+                if (!_komsulukListesi.ContainsKey(guncelDurak)) continue;
+
+                foreach (var komsu in _komsulukListesi[guncelDurak])
+                {
+                    if (ziyaretEdilenler.Contains(komsu.HedefId)) continue;
+
+                    // İYİLEŞTİRME 4: Aktarma Cezası (Farklı hatta geçiş simülasyonu)
+                    double ceza = 0;
+                    string mevcutHat = oncekiHat.ContainsKey(guncelDurak) ? oncekiHat[guncelDurak] : null;
+                    if (mevcutHat != null && komsu.HatBilgisi != null && mevcutHat != komsu.HatBilgisi)
+                    {
+                        ceza = aktarmaCezasi;
+                    }
+
+                    double guncelG = gMaliyeti.ContainsKey(guncelDurak) ? gMaliyeti[guncelDurak] : double.MaxValue;
+                    double yeniG = guncelG + komsu.Maliyet + ceza;
+                    double komsuG = gMaliyeti.ContainsKey(komsu.HedefId) ? gMaliyeti[komsu.HedefId] : double.MaxValue;
+
+                    if (yeniG < komsuG)
+                    {
+                        oncekiDurak[komsu.HedefId] = guncelDurak;
+                        oncekiHat[komsu.HedefId] = komsu.HatBilgisi;
+                        gMaliyeti[komsu.HedefId] = yeniG;
+
+                        double fMaliyeti = yeniG + HeuristicHesapla(komsu.HedefId, hedefId);
+                        minHeap.Enqueue(komsu.HedefId, fMaliyeti);
+                    }
+                }
+            }
+
+            return RotaOlustur(oncekiDurak, hedefId);
+        }
+
+        private double HeuristicHesapla(string anlikId, string hedefId)
+        {
+            var anlik = _duraklar[anlikId];
+            var hedef = _duraklar[hedefId];
+            
+            // Kuş uçuşu (Öklid) mesafe
+            double dx = anlik.Enlem - hedef.Enlem;
+            double dy = anlik.Boylam - hedef.Boylam;
+            double mesafe = Math.Sqrt(dx * dx + dy * dy);
+
+            // İYİLEŞTİRME 5: Tie-Breaking (Eşit yollarda hedefe düz gitmeyi zorlar)
+            return mesafe * 1.001;
+        }
+
+        private List<string> RotaOlustur(Dictionary<string, string> oncekiDurak, string hedefId)
+        {
+            var rota = new List<string>();
+            string aktif = hedefId;
+
+            if (!oncekiDurak.ContainsKey(aktif)) return rota;
+
+            while (oncekiDurak.ContainsKey(aktif))
+            {
+                rota.Add(aktif);
+                aktif = oncekiDurak[aktif];
+            }
+            rota.Add(aktif);
+            rota.Reverse();
+            
+            return rota;
+        }
+    }
+
+    // Temel Veri Yapısı Modelleri
+    public class Durak
+    {
+        public string Id { get; set; }
+        public double Enlem { get; set; }
+        public double Boylam { get; set; }
+    }
+
+    public class Baglanti
+    {
+        public string HedefId { get; set; }
+        public double Maliyet { get; set; }
+        public string HatBilgisi { get; set; }
+    }
+}
