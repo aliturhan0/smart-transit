@@ -1,6 +1,0 @@
-Çalıştırmak istediğinde terminali aç ve şu iki komutu yaz:
-
-cd ~/Desktop/smart-transit
-python3 -m http.server 8080
-
-Sonra tarayıcıda http://localhost:8080 aç, o kadar!

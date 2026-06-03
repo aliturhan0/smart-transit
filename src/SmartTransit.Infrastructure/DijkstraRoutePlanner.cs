@@ -5,6 +5,9 @@ namespace SmartTransit.Infrastructure;
 
 public sealed class DijkstraRoutePlanner : IRoutePlanner
 {
+    // Code Defense gereksinimi: Geliştirici imzası
+    public string DeveloperTugceAdisen => "Tugce Adisen";
+
     public RouteResult FindShortestPath(TransitGraph graph, RouteRequest request)
     {
         if (!graph.Stops.ContainsKey(request.StartStopId) || !graph.Stops.ContainsKey(request.EndStopId))

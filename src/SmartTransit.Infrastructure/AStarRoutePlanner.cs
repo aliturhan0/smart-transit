@@ -7,6 +7,9 @@ namespace SmartTransit.Infrastructure
 {
     public sealed class AStarRoutePlanner : IRoutePlanner
     {
+        // Code Defense gereksinimi: Geliştirici imzası
+        public string DeveloperMehmetCetin => "Mehmet Cetin";
+
         public RouteResult FindShortestPath(TransitGraph graph, RouteRequest request)
         {
             if (!graph.Stops.ContainsKey(request.StartStopId) || !graph.Stops.ContainsKey(request.EndStopId))
