@@ -2,16 +2,19 @@ namespace SmartTransit.Domain;
 
 public sealed class TransitGraph
 {
-    private readonly Dictionary<int, Stop> _stops = new();
-    private readonly Dictionary<int, List<TransitEdge>> _adjacency = new();
+    private readonly HashTable<int, Stop> _stops = new();
+    private readonly HashTable<int, List<TransitEdge>> _adjacency = new();
 
-    public IReadOnlyDictionary<int, Stop> Stops => _stops;
-    public IReadOnlyDictionary<int, List<TransitEdge>> Adjacency => _adjacency;
+    public HashTable<int, Stop> Stops => _stops;
+    public HashTable<int, List<TransitEdge>> Adjacency => _adjacency;
 
     public void AddStop(Stop stop)
     {
-        _stops[stop.Id] = stop;
-        _adjacency.TryAdd(stop.Id, []);
+        _stops.Set(stop.Id, stop);
+        if (!_adjacency.ContainsKey(stop.Id))
+        {
+            _adjacency.Set(stop.Id, new List<TransitEdge>());
+        }
     }
 
     public void AddEdge(TransitEdge edge)
@@ -21,6 +24,7 @@ public sealed class TransitGraph
             throw new InvalidOperationException("Both edge stops must be added before adding edges.");
         }
 
-        _adjacency[edge.FromStopId].Add(edge);
+        _adjacency.Get(edge.FromStopId).Add(edge);
     }
 }
+

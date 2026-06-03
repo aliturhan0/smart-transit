@@ -21,42 +21,6 @@ import { MapRenderer } from './renderer.js';
 
 class TransitApp {
     constructor() {
-        // ============================================================
-        // VERİ YAPILARI OLUŞTUR (Faz 1)
-        // ============================================================
-        
-        // Sentetik veri üret
-        this.cityData = generateCityData();
-        
-        // KD-Tree: Durak koordinatları için uzaysal indeks
-        this.kdTree = new KdTree(this.cityData.stops.map(s => ({
-            x: s.x, y: s.y, id: s.id, name: s.name
-        })));
-        
-        // Graf: Toplu taşıma ağı (multigraph)
-        this.graph = new Graph();
-        
-        // Hash Tabloları: Hızlı erişim
-        this.stopTable = new HashTable();   // Durak ID → durak bilgisi
-        this.lineTable = new HashTable();   // Hat ID → hat bilgileri
-        
-        // Verileri yapılara yükle
-        loadDataIntoStructures(
-            this.cityData, 
-            this.graph, 
-            this.kdTree, 
-            this.stopTable, 
-            this.lineTable
-        );
-        
-        // ============================================================
-        // ARAYÜZ (Faz 3)
-        // ============================================================
-        
-        // Canvas ve renderer
-        this.canvas = document.getElementById('map-canvas');
-        this.renderer = new MapRenderer(this.canvas, this.cityData);
-        
         // Uygulama durumu
         this.mode = 'knn';              // 'knn' | 'route'
         this.algorithm = 'dijkstra';     // 'dijkstra' | 'astar'
@@ -65,21 +29,60 @@ class TransitApp {
         this.transferPenalty = 3;
         this.startStopId = null;
         this.endStopId = null;
-        
-        // Olay dinleyicilerini kur
-        this.setupEventListeners();
-        
-        // Hat listesini göster
-        this.renderLineList();
-        
-        // Veri yapısı istatistiklerini göster
-        this.updateDataStructureStats();
-        
-        // Araç simülasyonunu başlat
-        this.renderer.startVehicleSimulation();
-        
-        console.log('✅ Akıllı Toplu Taşıma Sistemi hazır!');
-        console.log(`📊 ${this.cityData.stops.length} durak, ${this.cityData.lines.length} hat, ${this.cityData.edges.length} bağlantı yüklendi.`);
+
+        // C# Backend API'den verileri çek ve uygulamayı başlat
+        this.init();
+    }
+
+    async init() {
+        try {
+            console.log('📡 C# Backend API bağlantısı kuruluyor...');
+            const response = await fetch('http://localhost:5099/api/data');
+            this.cityData = await response.json();
+            
+            // KD-Tree: Durak koordinatları için uzaysal indeks
+            this.kdTree = new KdTree(this.cityData.stops.map(s => ({
+                x: s.x, y: s.y, id: s.id, name: s.name
+            })));
+            
+            // Graf: Toplu taşıma ağı (multigraph)
+            this.graph = new Graph();
+            
+            // Hash Tabloları: Hızlı erişim
+            this.stopTable = new HashTable();   // Durak ID → durak bilgisi
+            this.lineTable = new HashTable();   // Hat ID → hat bilgileri
+            
+            // Verileri yapılara yükle
+            loadDataIntoStructures(
+                this.cityData, 
+                this.graph, 
+                this.kdTree, 
+                this.stopTable, 
+                this.lineTable
+            );
+            
+            // Canvas ve renderer
+            this.canvas = document.getElementById('map-canvas');
+            this.renderer = new MapRenderer(this.canvas, this.cityData);
+            
+            // Olay dinleyicilerini kur
+            this.setupEventListeners();
+            
+            // Hat listesini göster
+            this.renderLineList();
+            
+            // Veri yapısı istatistiklerini göster
+            this.updateDataStructureStats();
+            
+            // Araç simülasyonunu başlat
+            this.renderer.startVehicleSimulation();
+            
+            console.log('✅ Akıllı Toplu Taşıma Sistemi C# Web API ile hazır!');
+            console.log(`📊 ${this.cityData.stops.length} durak, ${this.cityData.lines.length} hat, ${this.cityData.edges.length} bağlantı yüklendi.`);
+        } catch (error) {
+            console.error('❌ C# API sunucusuna bağlanılamadı!', error);
+            alert('C# API sunucusuna bağlanılamadı (http://localhost:5099). Lütfen C# backend uygulamasının çalıştığından emin olun.');
+        }
     }
 
     // ============================================================
@@ -188,17 +191,29 @@ class TransitApp {
     // KNN ARAMASI
     // ============================================================
     
-    performKnnSearch(mapPos) {
-        // KD-Tree üzerinde KNN araması
-        const result = findNearestStops(this.kdTree, mapPos, this.kValue);
-        
-        // Sonuçları renderer'a gönder
-        this.renderer.setKnnResults(result.results, mapPos);
-        this.renderer.setRouteResult(null);
-        this.renderer.setSelectedStops([]);
-        
-        // Sonuçları panelde göster
-        this.displayKnnResults(result);
+    async performKnnSearch(mapPos) {
+        try {
+            const response = await fetch('http://localhost:5099/api/knn', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    x: mapPos.x,
+                    y: mapPos.y,
+                    k: this.kValue
+                })
+            });
+            const result = await response.json();
+
+            // Sonuçları renderer'a gönder
+            this.renderer.setKnnResults(result.results, mapPos);
+            this.renderer.setRouteResult(null);
+            this.renderer.setSelectedStops([]);
+            
+            // Sonuçları panelde göster
+            this.displayKnnResults(result);
+        } catch (error) {
+            console.error('KNN API Hatası:', error);
+        }
     }
 
     displayKnnResults(result) {
@@ -303,36 +318,43 @@ class TransitApp {
         }
     }
     
-    calculateRoute() {
+    async calculateRoute() {
         if (!this.startStopId || !this.endStopId) return;
         
-        const options = {
-            criterion: this.criterion,
-            transferPenalty: this.transferPenalty
-        };
-        
-        // Seçilen algoritmayı çalıştır
-        let result;
-        if (this.algorithm === 'astar') {
-            result = aStar(this.graph, this.startStopId, this.endStopId, options);
-        } else {
-            result = dijkstra(this.graph, this.startStopId, this.endStopId, options);
+        try {
+            const response = await fetch('http://localhost:5099/api/route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    startStopId: this.startStopId,
+                    endStopId: this.endStopId,
+                    algorithm: this.algorithm,
+                    criterion: this.criterion,
+                    transferPenalty: this.transferPenalty
+                })
+            });
+            const result = await response.json();
+
+            if (result.error || !result.found) {
+                this.renderer.setRouteResult(null);
+                const container = document.getElementById('results-content');
+                container.innerHTML = `<div class="stats-box error">
+                    <div class="stats-title">❌ Rota Bulunamadı</div>
+                    <p>${result.error || 'Bu iki durak arasında bağlantı bulunamadı.'}</p>
+                </div>`;
+                document.getElementById('results-panel').classList.add('visible');
+                return;
+            }
+            
+            // Sonuçları renderer'a gönder
+            this.renderer.setRouteResult(result);
+            this.renderer.setKnnResults([], null);
+            
+            // Sonuçları panelde göster
+            this.displayRouteResults(result, result.compResult);
+        } catch (error) {
+            console.error('Rota API Hatası:', error);
         }
-        
-        // Karşılaştırma için diğer algoritmayı da çalıştır
-        let compResult;
-        if (this.algorithm === 'astar') {
-            compResult = dijkstra(this.graph, this.startStopId, this.endStopId, options);
-        } else {
-            compResult = aStar(this.graph, this.startStopId, this.endStopId, options);
-        }
-        
-        // Sonuçları renderer'a gönder
-        this.renderer.setRouteResult(result);
-        this.renderer.setKnnResults([], null);
-        
-        // Sonuçları panelde göster
-        this.displayRouteResults(result, compResult);
     }
 
     displayRouteResults(result, compResult) {
