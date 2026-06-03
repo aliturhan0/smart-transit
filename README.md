@@ -55,6 +55,11 @@ Projemizi sıradan bir harita uygulamasından ayıran en büyük özellik, **ken
 
 Kullanıcının saniyeler içinde gördüğü bu akıcı deneyim, arka planda C# ile sıfırdan geliştirilmiş çok güçlü veri yapıları ve mikroservis mimarisine dayanmaktadır. 
 
+---
+> *Bu proje, veri yapılarının ve modern mikroservis mimarisinin (C#, Python, JS) entegre şekilde kullanıldığı, yüksek performanslı bir mühendislik çalışmasıdır.*
+
+**Sürüm:** v1.0.0 (Final) 
+
 1. **Uzamsal Ağaç (KD-Tree):** Haritada tıklanan bir noktaya en yakın durakları bulmak için tüm durakları tek tek aramak (doğrusal tarama) sistemi yavaşlatır. Bu yüzden veriler bir uzamsal ağaçta tutulur ve arama işlemi anında (logaritmik hızda) sonuçlanır.
 2. **Karma Tablolar (Hash Table):** Durakların ve hatların bilgilerine, tıpkı bir sözlükten kelime bulur gibi anında (O(1) hızında) erişilir.
 3. **Graf ve Yönlendirme Algoritmaları:** Şehir ağı bir **Multigraph** olarak tasarlanmıştır. Hedefe giden en kısa yolu bulmak için dünyaca ünlü **Dijkstra** ve **A* (A-Star)** algoritmaları kullanılmıştır.
