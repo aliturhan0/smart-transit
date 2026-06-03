@@ -3,7 +3,7 @@
 
   # 🚇 Akıllı Toplu Taşıma ve Navigasyon Sistemi
   
-  **Veri Yapıları ve Algoritmalar - Dönem Sonu Proje Raporu (Final)**
+  **Veri Yapıları Dersi - Dönem Sonu Proje Raporu (Final)**
 
   [![Docker](https://img.shields.io/badge/Docker-Konteynerize-blue?logo=docker&logoColor=white)](https://www.docker.com/)
   [![C#](https://img.shields.io/badge/C%23-.NET%208%20Backend-512BD4?logo=c-sharp&logoColor=white)]()
