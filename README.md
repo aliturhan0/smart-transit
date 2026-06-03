@@ -88,9 +88,9 @@ Frontend (Arayüz), kullanıcı deneyimini maksimize eden, sadeleştirilmiş bir
 
 ## 🚀 Başlangıç ve Kurulum Rehberi (Docker)
 
-Bu karmaşık yapı, jürilerin ve kullanıcıların bilgisayarlarında sorunsuz çalışması için baştan uca **Docker** ile konteynerize edilmiştir. Program kurmanıza gerek yoktur.
+Bu karmaşık yapı, kullanıcıların bilgisayarlarında sorunsuz çalışması için baştan uca **Docker** ile konteynerize edilmiştir. Program kurmanıza gerek yoktur.
 
 👉 **Lütfen projeyi çalıştırmak için [KURULUM_REHBERI.md](KURULUM_REHBERI.md) dosyasını okuyunuz.**
 
 ---
-> *Bu proje, veri yapılarının ve modern mikroservis mimarisinin (C#, Python, JS) entegre şekilde kullanıldığı, yüksek performanslı bir mühendislik çalışmasıdır.*
+> *Bu proje, veri yapılarının ve modern mikroservis mimarisinin (C#, Python, JS) entegre şekilde kullanıldığı bir çalışmadır.*
