@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from typing import List, Optional
 import time
@@ -9,7 +9,7 @@ app = FastAPI(title="Smart Transit AI Service")
 class RouteSegment(BaseModel):
     lineName: str
     lineColor: str
-    stops: List[int]
+    stops: List[str]
     duration: float
     distance: float
 
@@ -26,8 +26,16 @@ class AiResponse(BaseModel):
     ai_comment: str
     execution_time_ms: float
 
-@app.post("/api/ai/analyze", response_model=AiResponse)
-async def analyze_route(req: AiRequest):
+@app.post("/api/ai/analyze")
+async def analyze_route(request: Request):
+    try:
+        raw_body = await request.json()
+        print("RAW BODY:", raw_body)
+        req = AiRequest(**raw_body)
+    except Exception as e:
+        print("VALIDATION ERROR:", e)
+        return {"ai_comment": f"Error: {e}", "execution_time_ms": 0}
+        
     start_time = time.time()
     
     # 1. Prompt Hazırlığı (Rubrik: "AI API'sine gönderilen prompt'ların dökümü")
@@ -39,29 +47,61 @@ Bu yolculuk toplam {req.totalMinutes:.1f} dakika sürecek ve {req.totalDistance:
 Kullanılacak hatlar: {lines_used}. Toplam aktarma sayısı: {req.transfers}.
 Lütfen yolcuya bu rota hakkında doğal dilde kısa, pratik ve dostane bir tavsiye ver."""
 
-    # 2. Mock LLM Cevabı (Gerçek bir API key gerektirmeden çalışması için)
-    # Burada normalde Google Gemini API veya OpenAI API çağrılırdı.
-    
+    # 2. Mock LLM Cevabı (Çeşitlendirilmiş Asistan)
+    import random
     comments = []
+    
+    # Aktarma Senaryoları
     if req.transfers == 0:
-        comments.append("Harika bir haber, aktarma yapmadan tek vasıtayla doğrudan hedefinize ulaşacaksınız!")
+        no_transfer_msgs = [
+            "Harika bir haber! Aktarma yapmadan, tek vasıtayla rahatça hedefinize ulaşacaksınız.",
+            "Şanslısınız, doğrudan giden bir hat buldum. Gevşeyin ve yolculuğun tadını çıkarın.",
+            f"Hiç aktarma yapmanıza gerek yok. {req.segments[0].lineName} hattı sizi doğrudan hedefinize götürecek."
+        ]
+        comments.append(random.choice(no_transfer_msgs))
     elif req.transfers == 1:
-        comments.append(f"Yolculuğunuz sırasında 1 kez aktarma yapmanız gerekiyor. {req.segments[0].lineName} hattından inince diğer aracı kaçırmamaya dikkat edin.")
+        one_transfer_msgs = [
+            f"Yolculuğunuz sırasında 1 kez araç değiştireceksiniz. {req.segments[0].lineName} hattından inince tabelaları takip etmeyi unutmayın.",
+            "Küçük bir aktarmamız var. İlk araçtan indikten sonra diğer hatta geçerken eşyalarınızı unutmayın lütfen.",
+            f"Bu rotada 1 aktarma mevcut. İlk olarak {req.segments[0].lineName} ile başlayıp sonra diğer hatta geçiş yapacağız."
+        ]
+        comments.append(random.choice(one_transfer_msgs))
     else:
-        comments.append(f"Bu rotada {req.transfers} aktarma var, biraz yorucu olabilir ama en kısa süre bu şekilde hesaplandı.")
+        many_transfer_msgs = [
+            f"Bu rotada {req.transfers} aktarma var, biraz yorucu olabilir ancak sistemin bulduğu en mantıklı seçenek bu.",
+            f"Şehir içinde {req.transfers} kez araç değiştireceğiz. Aktarma noktalarında kalabalıklara dikkat edin.",
+            f"Birkaç aktarmamız olacak ({req.transfers} kez). Ama merak etmeyin, en hızlı varış için optimize edilmiş bir rota kullanıyoruz."
+        ]
+        comments.append(random.choice(many_transfer_msgs))
         
+    # Süre Senaryoları
     if req.totalMinutes > 30:
-        comments.append("Yolculuk biraz uzun sürecek, yanınıza okuyacak bir şeyler almanızı tavsiye ederim.")
+        long_msgs = [
+            "Yolculuk biraz uzun sürecek, yanınıza okuyacak bir şeyler veya kulaklığınızı almanızı tavsiye ederim.",
+            "Uuzun bir seyahat olacak. Cam kenarına geçip podcast dinlemek için harika bir fırsat!",
+            "Yolculuğunuz yarım saati geçecek, telefonunuzun şarjının dolu olduğundan emin olun."
+        ]
+        comments.append(random.choice(long_msgs))
     else:
-        comments.append("Kısa ve rahat bir yolculuk olacak.")
+        short_msgs = [
+            "Kısa ve pratik bir yolculuk olacak.",
+            "Hemen varıyoruz, bence ayakta kalsanız da pek yorulmazsınız.",
+            "Göz açıp kapayıncaya kadar hedefinize varmış olacaksınız!"
+        ]
+        comments.append(random.choice(short_msgs))
         
+    # Araç Tipi Eklemeleri
     if "Metro" in lines_used:
-        comments.append("Metro hatları trafiğe takılmadığı için genellikle hesaplanan süreye tam uyar.")
+        metro_msgs = [
+            "Metro hatları trafiğe takılmadığı için planlanan süreye tam uyacaktır.",
+            "Metronun hız avantajını kullanarak trafik stresinden uzak bir yolculuk yapacaksınız."
+        ]
+        comments.append(random.choice(metro_msgs))
     
     # Mock AI Gecikmesi simülasyonu
     time.sleep(random.uniform(0.3, 0.8))
     
-    ai_comment = " ".join(comments) + "\n\n(Not: Bu mesaj asenkron Python mikroservisinden üretilmiştir.)"
+    ai_comment = " ".join(comments)
     
     exec_time = (time.time() - start_time) * 1000
     
