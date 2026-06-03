@@ -111,7 +111,7 @@ namespace SmartTransit.Infrastructure
                 new CityLine { Id = "B2", Name = "B2 Otobüs", Type = "bus", Color = "#06b6d4", SpeedFactor = 1.3, Stops = new[] { 1, 4, 51, 49, 56, 76, 43, 41, 42, 45 } },
                 new CityLine { Id = "B3", Name = "B3 Otobüs", Type = "bus", Color = "#ec4899", SpeedFactor = 1.3, Stops = new[] { 1, 5, 52, 48, 18, 20, 57, 78, 38, 40, 39 } },
                 new CityLine { Id = "B4", Name = "B4 Otobüs", Type = "bus", Color = "#f97316", SpeedFactor = 1.3, Stops = new[] { 65, 66, 22, 24, 23, 21, 25, 50, 72, 71, 4, 51, 11, 14, 15 } },
-                new CityLine { Id = "B5", Name = "B5 Otobüs", Type = "bus", Color = "#84cc16", SpeedFactor = 1.3, Stops = new[] { 29, 30, 79, 64, 61, 67, 19, 16, 18, 48, 57, 36, 37, 39, 68 } },
+                new CityLine { Id = "B5", Name = "B5 Otobüs", Type = "bus", Color = "#84cc16", SpeedFactor = 1.3, Stops = new[] { 29, 30, 79, 64, 61, 67, 19, 16, 18, 48, 57, 36, 37, 39, 63, 68 } },
                 new CityLine { Id = "B6", Name = "B6 Otobüs", Type = "bus", Color = "#a855f7", SpeedFactor = 1.3, Stops = new[] { 71, 1, 59, 73, 55, 48, 13, 12, 11, 15, 70 } },
                 new CityLine { Id = "B7", Name = "B7 Otobüs", Type = "bus", Color = "#14b8a6", SpeedFactor = 1.3, Stops = new[] { 33, 31, 62, 80, 69, 44, 42, 77, 56, 49, 4 } }
             };
