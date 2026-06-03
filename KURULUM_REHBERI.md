@@ -6,7 +6,7 @@ Bu proje **Microservices (Mikroservis)** mimarisi kullanılarak geliştirilmiş 
 
 ## 📋 Sistem Gereksinimleri
 
-Projenizi kendi bilgisayarınızda veya sunum yapacağınız hocanın bilgisayarında çalıştırmak için **sadece 1 adet** programa ihtiyacınız var:
+Projenizi kendi bilgisayarınızda çalıştırmak için **sadece 1 adet** programa ihtiyacınız var:
 - **[Docker Desktop](https://www.docker.com/products/docker-desktop)**
 
 *(Not: Node.js, Python veya .NET SDK kurmanıza GEREK YOKTUR!)*
