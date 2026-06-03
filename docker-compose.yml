@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. Frontend (Nginx)
+  frontend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8888:80"
+    depends_on:
+      - backend
+    networks:
+      - transit-network
+
+  # 2. C# Backend (SmartTransit API)
+  backend:
+    build:
+      context: .
+      dockerfile: src/SmartTransit.Api/Dockerfile
+    ports:
+      - "5099:8080"
+    environment:
+      - AI_SERVICE_URL=http://ai-service:8000/api/ai/analyze
+    depends_on:
+      - ai-service
+    networks:
+      - transit-network
+
+  # 3. Python AI Microservice (FastAPI)
+  ai-service:
+    build:
+      context: ./src/SmartTransit.AiService
+    ports:
+      - "8000:8000"
+    networks:
+      - transit-network
+
+networks:
+  transit-network:
+    driver: bridge

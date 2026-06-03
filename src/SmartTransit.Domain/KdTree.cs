@@ -24,6 +24,9 @@ namespace SmartTransit.Domain
         private KdTreeNode _root;
         private int _nodeCount;
 
+        // Code Defense gereksinimi: Geliştirici imzası
+        public string DeveloperAliTurhan => "Ali Turhan";
+
         public KdTreeNode Root => _root;
         public int NodeCount => _nodeCount;
 

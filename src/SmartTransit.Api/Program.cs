@@ -7,6 +7,7 @@ using SmartTransit.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpClient();
 
 // Initialize and register domain/infrastructure structures
 var (seedStops, seedLines) = CityDataGenerator.GetData();
@@ -185,7 +187,7 @@ app.MapPost("/api/knn", (KnnApiRequest request, KdTree tree) =>
 });
 
 // POST /api/route: Pathfinding using C# Dijkstra or AStar
-app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRoutePlanner dijkstraPlanner, AStarRoutePlanner aStarPlanner) =>
+app.MapPost("/api/route", async (RouteApiRequest request, TransitGraph g, DijkstraRoutePlanner dijkstraPlanner, AStarRoutePlanner aStarPlanner, System.Net.Http.IHttpClientFactory httpClientFactory) =>
 {
     int startId = int.Parse(request.StartStopId.Replace("S", ""));
     int endId = int.Parse(request.EndStopId.Replace("S", ""));
@@ -379,6 +381,44 @@ app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRout
         executionTimeMs = Math.Round(compExecutionTimeMs, 3)
     };
 
+    // Call AI Service
+    object aiResponse = null;
+    try
+    {
+        var aiUrl = Environment.GetEnvironmentVariable("AI_SERVICE_URL") ?? "http://localhost:8000/api/ai/analyze";
+        var client = httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(3); // Don't block too long if AI service is down
+        
+        var startStopName = stopsRaw.FirstOrDefault(s => s.Id == startId)?.Name ?? "Bilinmiyor";
+        var endStopName = stopsRaw.FirstOrDefault(s => s.Id == endId)?.Name ?? "Bilinmiyor";
+
+        var payload = new
+        {
+            startStopName = startStopName,
+            endStopName = endStopName,
+            totalMinutes = totalDuration,
+            totalDistance = totalDistance,
+            transfers = transfers,
+            segments = segments.Select(s => new {
+                lineName = s.GetType().GetProperty("lineName").GetValue(s, null),
+                lineColor = s.GetType().GetProperty("lineColor").GetValue(s, null),
+                stops = s.GetType().GetProperty("stops").GetValue(s, null),
+                duration = s.GetType().GetProperty("duration").GetValue(s, null),
+                distance = s.GetType().GetProperty("distance").GetValue(s, null)
+            })
+        };
+
+        var response = await client.PostAsJsonAsync(aiUrl, payload);
+        if (response.IsSuccessStatusCode)
+        {
+            aiResponse = await response.Content.ReadFromJsonAsync<object>();
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"AI Service Error: {ex.Message}");
+    }
+
     return Results.Ok(new
     {
         path = pathStopIds,
@@ -395,7 +435,8 @@ app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRout
             found = compResult.TotalCost >= 0,
             totalCost = compResult.TotalCost,
             stats = compStats
-        }
+        },
+        ai = aiResponse
     });
 });
 
