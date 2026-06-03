@@ -11,12 +11,6 @@
  * ============================================================
  */
 
-import { KdTree } from './kd-tree.js';
-import { Graph } from './graph.js';
-import { MinHeap } from './min-heap.js';
-import { HashTable } from './hash-table.js';
-import { findNearestStops, dijkstra, aStar } from './algorithms.js';
-import { generateCityData, loadDataIntoStructures } from './synthetic-data.js';
 import { MapRenderer } from './renderer.js';
 
 class TransitApp {
@@ -40,26 +34,8 @@ class TransitApp {
             const response = await fetch('http://localhost:5099/api/data');
             this.cityData = await response.json();
             
-            // KD-Tree: Durak koordinatları için uzaysal indeks
-            this.kdTree = new KdTree(this.cityData.stops.map(s => ({
-                x: s.x, y: s.y, id: s.id, name: s.name
-            })));
-            
-            // Graf: Toplu taşıma ağı (multigraph)
-            this.graph = new Graph();
-            
-            // Hash Tabloları: Hızlı erişim
-            this.stopTable = new HashTable();   // Durak ID → durak bilgisi
-            this.lineTable = new HashTable();   // Hat ID → hat bilgileri
-            
-            // Verileri yapılara yükle
-            loadDataIntoStructures(
-                this.cityData, 
-                this.graph, 
-                this.kdTree, 
-                this.stopTable, 
-                this.lineTable
-            );
+            // Hızlı durak erişimi için yerel JS Map yapısını kullan
+            this.stopsMap = new Map(this.cityData.stops.map(s => [s.id, s]));
             
             // Canvas ve renderer
             this.canvas = document.getElementById('map-canvas');
@@ -244,7 +220,7 @@ class TransitApp {
         html += '<div class="result-list">';
         for (let i = 0; i < result.results.length; i++) {
             const r = result.results[i];
-            const stop = this.stopTable.get(r.id);
+            const stop = this.stopsMap.get(r.id);
             const stopLines = this.cityData.lines.filter(l => l.stops.includes(r.id));
             
             html += `<div class="result-item">
@@ -275,16 +251,26 @@ class TransitApp {
     // ============================================================
     
     handleRouteSelection(mapPos, sx, sy) {
-        // Tıklanan yere en yakın durağı bul
-        const nearestResult = findNearestStops(this.kdTree, mapPos, 1);
+        // Tıklanan yere en yakın durağı bul (C# verileri üzerinden mesafe hesaplayarak)
+        let nearestStop = null;
+        let minDist = Infinity;
+        for (const stop of this.cityData.stops) {
+            const dx = stop.x - mapPos.x;
+            const dy = stop.y - mapPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < minDist) {
+                minDist = dist;
+                nearestStop = stop;
+            }
+        }
         
-        if (nearestResult.results.length === 0) return;
+        if (!nearestStop) return;
         
-        const nearestStop = nearestResult.results[0];
+        const nearestStopId = nearestStop.id;
         
         if (!this.startStopId) {
             // Başlangıç durağı seç
-            this.startStopId = nearestStop.id;
+            this.startStopId = nearestStopId;
             this.renderer.setSelectedStops([this.startStopId]);
             this.renderer.setKnnResults([], null);
             
@@ -406,7 +392,7 @@ class TransitApp {
                 </div>
                 <div class="segment-stops">
                     ${seg.stops.map((stopId, j) => {
-                        const stop = this.stopTable.get(stopId);
+                        const stop = this.stopsMap.get(stopId);
                         const isFirst = j === 0;
                         const isLast = j === seg.stops.length - 1;
                         let icon = '●';
@@ -502,33 +488,31 @@ class TransitApp {
     // ============================================================
     
     updateDataStructureStats() {
-        const kdStats = this.kdTree.getStats();
-        const graphStats = this.graph.getStats();
-        const stopTableStats = this.stopTable.getStats();
-        const lineTableStats = this.lineTable.getStats();
-        
+        const stats = this.cityData.stats;
+        if (!stats) return;
+
         const container = document.getElementById('ds-stats');
         
         container.innerHTML = `
             <div class="ds-stat-item">
-                <div class="ds-stat-name">🌳 KD-Tree</div>
-                <div class="ds-stat-detail">${kdStats.nodeCount} düğüm, yükseklik: ${kdStats.actualHeight}</div>
+                <div class="ds-stat-name">🌳 KD-Tree (C#)</div>
+                <div class="ds-stat-detail">${stats.kdTree.nodeCount} düğüm, yükseklik: ${stats.kdTree.actualHeight}</div>
             </div>
             <div class="ds-stat-item">
-                <div class="ds-stat-name">🔗 Graf (Multigraph)</div>
-                <div class="ds-stat-detail">${graphStats.vertexCount} düğüm, ${graphStats.edgeCount} kenar, ort. derece: ${graphStats.avgDegree}</div>
+                <div class="ds-stat-name">🔗 Graf (C# Multigraph)</div>
+                <div class="ds-stat-detail">${stats.graph.vertexCount} düğüm, ${stats.graph.edgeCount} kenar, ort. derece: ${stats.graph.avgDegree}</div>
             </div>
             <div class="ds-stat-item">
-                <div class="ds-stat-name">#️⃣ Hash Tablo (Durak)</div>
-                <div class="ds-stat-detail">${stopTableStats.size} kayıt, yük: ${stopTableStats.loadFactor}, maks. zincir: ${stopTableStats.maxChainLength}</div>
+                <div class="ds-stat-name">#️⃣ Hash Tablo (C# Durak)</div>
+                <div class="ds-stat-detail">${stats.stopTable.Size} kayıt, yük: ${stats.stopTable.LoadFactor}, maks. zincir: ${stats.stopTable.MaxChainLength}</div>
             </div>
             <div class="ds-stat-item">
-                <div class="ds-stat-name">#️⃣ Hash Tablo (Hat)</div>
-                <div class="ds-stat-detail">${lineTableStats.size} kayıt, yük: ${lineTableStats.loadFactor}</div>
+                <div class="ds-stat-name">#️⃣ Hash Tablo (C# Hat)</div>
+                <div class="ds-stat-detail">${stats.lineTable.Size} kayıt, yük: ${stats.lineTable.LoadFactor}</div>
             </div>
             <div class="ds-stat-item">
-                <div class="ds-stat-name">📊 Min-Heap</div>
-                <div class="ds-stat-detail">Dijkstra/A* sırasında kullanılır</div>
+                <div class="ds-stat-name">📊 Min-Heap (C#)</div>
+                <div class="ds-stat-detail">Dijkstra/A* sırasında backend'de kullanılır</div>
             </div>
         `;
     }

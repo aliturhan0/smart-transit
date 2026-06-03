@@ -231,5 +231,33 @@ namespace SmartTransit.Domain
 
             return true;
         }
+
+        public HashTableStats GetStats()
+        {
+            int maxChainLength = 0;
+            if (_buckets != null)
+            {
+                foreach (var bucket in _buckets)
+                {
+                    if (bucket != null && bucket.Count > maxChainLength)
+                    {
+                        maxChainLength = bucket.Count;
+                    }
+                }
+            }
+            return new HashTableStats
+            {
+                Size = _size,
+                LoadFactor = Math.Round((double)_size / _capacity, 3),
+                MaxChainLength = maxChainLength
+            };
+        }
+    }
+
+    public class HashTableStats
+    {
+        public int Size { get; set; }
+        public double LoadFactor { get; set; }
+        public int MaxChainLength { get; set; }
     }
 }

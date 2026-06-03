@@ -29,8 +29,15 @@ var (seedStops, seedLines) = CityDataGenerator.GetData();
 var graph = CityDataGenerator.BuildGraph(seedStops, seedLines);
 var kdTree = new KdTree(seedStops);
 
+var lineTable = new HashTable<string, CityLine>();
+foreach (var line in seedLines)
+{
+    lineTable.Set(line.Id, line);
+}
+
 builder.Services.AddSingleton(graph);
 builder.Services.AddSingleton(kdTree);
+builder.Services.AddSingleton(lineTable);
 builder.Services.AddSingleton<DijkstraRoutePlanner>();
 builder.Services.AddSingleton<AStarRoutePlanner>();
 
@@ -48,7 +55,7 @@ if (app.Environment.IsDevelopment())
 }
 
 // GET /api/data: Serves the city network data to the frontend
-app.MapGet("/api/data", (TransitGraph g) =>
+app.MapGet("/api/data", (TransitGraph g, KdTree tree, HashTable<string, CityLine> lineTable) =>
 {
     var (stops, lines) = CityDataGenerator.GetData();
 
@@ -104,6 +111,31 @@ app.MapGet("/api/data", (TransitGraph g) =>
         l => new { color = l.Color, name = l.Name, type = l.Type }
     );
 
+    // Compute structure stats on C# side
+    int edgeCount = 0;
+    foreach (var list in g.Adjacency.Values)
+    {
+        edgeCount += list.Count;
+    }
+    double avgDegree = g.Stops.Size > 0 ? (double)edgeCount / g.Stops.Size : 0;
+
+    var stats = new
+    {
+        kdTree = new
+        {
+            nodeCount = tree.NodeCount,
+            actualHeight = tree.GetHeight()
+        },
+        graph = new
+        {
+            vertexCount = g.Stops.Size,
+            edgeCount = edgeCount,
+            avgDegree = Math.Round(avgDegree, 2)
+        },
+        stopTable = g.Stops.GetStats(),
+        lineTable = lineTable.GetStats()
+    };
+
     return Results.Json(new
     {
         stops = stopList,
@@ -111,7 +143,8 @@ app.MapGet("/api/data", (TransitGraph g) =>
         edges = edgeList,
         lineColors = lineColors,
         MAP_WIDTH = 1000,
-        MAP_HEIGHT = 700
+        MAP_HEIGHT = 700,
+        stats = stats
     }, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = null });
 });
 
