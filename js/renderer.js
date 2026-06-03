@@ -10,6 +10,8 @@
  *   - Hesaplanan rotayı animasyonlu çizer
  *   - Araç simülasyonu (opsiyonel)
  *   - Hover ve seçim efektleri
+ * 
+ * Performans: Tüm durak aramaları O(1) Map lookup ile yapılır.
  * ============================================================
  */
 
@@ -18,6 +20,16 @@ export class MapRenderer {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.cityData = cityData;
+        
+        // O(1) durak erişimi için Map
+        this.stopsMap = new Map(cityData.stops.map(s => [s.id, s]));
+        
+        // Her durak için bağlı hatları önbellekle (drawStops'ta her frame hesaplamak yerine)
+        this.stopLinesCache = new Map();
+        for (const stop of cityData.stops) {
+            const lines = cityData.lines.filter(l => l.stops.includes(stop.id));
+            this.stopLinesCache.set(stop.id, lines);
+        }
         
         // Harita boyutları
         this.mapWidth = cityData.MAP_WIDTH;
@@ -31,6 +43,16 @@ export class MapRenderer {
         this.scaleY = 1;
         this.offsetX = 0;
         this.offsetY = 0;
+        // Mouse interactions for pan/zoom
+        this.isDragging = false;
+        this.dragStartX = 0;
+        this.dragStartY = 0;
+        this.lastOffsetX = 0;
+        this.lastOffsetY = 0;
+        
+        // Zoom limits
+        this.minScale = 0.5;
+        this.maxScale = 5.0;
         
         // Durum
         this.hoveredStop = null;
@@ -38,12 +60,15 @@ export class MapRenderer {
         this.knnResults = [];           // KNN sonuçları
         this.knnQueryPoint = null;      // KNN sorgu noktası
         this.routeResult = null;        // Hesaplanan rota
-        this.routeAnimProgress = 0;     // Rota animasyon ilerlemesi
-        this.routeAnimating = false;
         
         // Araç simülasyonu
         this.vehicles = [];
         this.vehicleSimActive = false;
+        
+        // Hızlı Set'ler — rota/knn kontrolleri O(1) olsun
+        this._knnResultIds = new Set();
+        this._routePathIds = new Set();
+        this._selectedStopSet = new Set();
         
         // Animasyon
         this.animationFrame = null;
@@ -82,13 +107,17 @@ export class MapRenderer {
         this.scaleY = usableHeight / this.mapHeight;
         
         // En kücük ölçeği kullan (oranı koru)
-        const scale = Math.min(this.scaleX, this.scaleY);
-        this.scaleX = scale;
-        this.scaleY = scale;
+        const baseScale = Math.min(this.scaleX, this.scaleY);
         
-        // Merkezle
-        this.offsetX = (this.displayWidth - this.mapWidth * scale) / 2;
-        this.offsetY = (this.displayHeight - this.mapHeight * scale) / 2;
+        // Sadece ilk yüklemede veya sıfırlamada offset/scale ayarla
+        if (!this.initialized) {
+            this.scaleX = baseScale;
+            this.scaleY = baseScale;
+            this.offsetX = (this.displayWidth - this.mapWidth * baseScale) / 2;
+            this.offsetY = (this.displayHeight - this.mapHeight * baseScale) / 2;
+            this.minScale = baseScale * 0.8; // Minimum zoom level
+            this.initialized = true;
+        }
     }
 
     /**
@@ -156,8 +185,11 @@ export class MapRenderer {
     draw() {
         const ctx = this.ctx;
         
-        // Arka plan
-        ctx.fillStyle = '#0f1724';
+        // Arka plan — subtle gradient
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, this.displayHeight);
+        bgGrad.addColorStop(0, '#080e1c');
+        bgGrad.addColorStop(1, '#0a1224');
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, this.displayWidth, this.displayHeight);
         
         // Grid
@@ -200,7 +232,7 @@ export class MapRenderer {
      */
     drawGrid() {
         const ctx = this.ctx;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
         ctx.lineWidth = 1;
         
         const gridSize = 50; // harita birimi
@@ -225,13 +257,13 @@ export class MapRenderer {
     }
 
     /**
-     * Toplu taşıma hatlarını çizer
+     * Toplu taşıma hatlarını çizer — Map lookup kullanır
      */
     drawLines() {
         const ctx = this.ctx;
         
         for (const line of this.cityData.lines) {
-            ctx.strokeStyle = line.color + '55'; // Yarı saydam
+            ctx.strokeStyle = line.color + '50';
             ctx.lineWidth = line.type === 'metro' ? 4 : line.type === 'tram' ? 3 : 2;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -247,7 +279,7 @@ export class MapRenderer {
             
             ctx.beginPath();
             for (let i = 0; i < line.stops.length; i++) {
-                const stop = this.cityData.stops.find(s => s.id === line.stops[i]);
+                const stop = this.stopsMap.get(line.stops[i]); // O(1) lookup
                 if (!stop) continue;
                 
                 const p = this.mapToScreen(stop.x, stop.y);
@@ -263,7 +295,7 @@ export class MapRenderer {
     }
 
     /**
-     * Durakları çizer
+     * Durakları çizer — Set ile O(1) kontroller
      */
     drawStops() {
         const ctx = this.ctx;
@@ -271,17 +303,16 @@ export class MapRenderer {
         for (const stop of this.cityData.stops) {
             const p = this.mapToScreen(stop.x, stop.y);
             
-            // Hangi hatlara ait?
-            const stopLines = this.cityData.lines.filter(l => l.stops.includes(stop.id));
+            // Hangi hatlara ait? (önbelleklenmiş)
+            const stopLines = this.stopLinesCache.get(stop.id);
             
-            const isSelected = this.selectedStops.includes(stop.id);
+            const isSelected = this._selectedStopSet.has(stop.id);
             const isHovered = this.hoveredStop && this.hoveredStop.id === stop.id;
-            const isKnnResult = this.knnResults.some(r => r.id === stop.id);
-            const isRouteStop = this.routeResult && this.routeResult.found && 
-                               this.routeResult.path.includes(stop.id);
+            const isKnnResult = this._knnResultIds.has(stop.id);
+            const isRouteStop = this._routePathIds.has(stop.id);
             
             let radius = 5;
-            let color = '#4a5568';
+            let color = '#3a4560';
             let glowColor = null;
             
             if (stopLines.length > 0) {
@@ -320,7 +351,7 @@ export class MapRenderer {
                 
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
-                ctx.fillStyle = glowColor + '30';
+                ctx.fillStyle = glowColor + '25';
                 ctx.fill();
             }
             
@@ -332,7 +363,7 @@ export class MapRenderer {
             
             // Kenar çizgisi
             ctx.lineWidth = 2;
-            ctx.strokeStyle = '#0f1724';
+            ctx.strokeStyle = '#080e1c';
             ctx.stroke();
             
             // İç beyaz nokta (aktarma durağı ise)
@@ -359,14 +390,14 @@ export class MapRenderer {
     }
 
     /**
-     * KNN sonuçlarını vurgular
+     * KNN sonuçlarını vurgular — Map lookup
      */
     drawKnnResults() {
         const ctx = this.ctx;
         
         for (let i = 0; i < this.knnResults.length; i++) {
             const result = this.knnResults[i];
-            const stop = this.cityData.stops.find(s => s.id === result.id);
+            const stop = this.stopsMap.get(result.id); // O(1)
             if (!stop) continue;
             
             const p = this.mapToScreen(stop.x, stop.y);
@@ -391,12 +422,15 @@ export class MapRenderer {
             
             // Arka plan daire
             ctx.beginPath();
-            ctx.arc(p.x + 14, p.y - 14, 9, 0, Math.PI * 2);
+            ctx.arc(p.x + 14, p.y - 14, 10, 0, Math.PI * 2);
             ctx.fillStyle = '#fbbf24';
             ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#080e1c';
+            ctx.stroke();
             
             // Numara
-            ctx.fillStyle = '#0f1724';
+            ctx.fillStyle = '#080e1c';
             ctx.fillText(i + 1, p.x + 14, p.y - 14);
             
             // Durak adı
@@ -422,6 +456,14 @@ export class MapRenderer {
         ctx.lineWidth = 2;
         ctx.stroke();
         
+        // İkinci halka (offset)
+        const ripple2 = ((this.time * 2) + 0.5) % 1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5 + ripple2 * 30, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(251, 191, 36, ${(1 - ripple2) * 0.5})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        
         // Artı işareti
         ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 2;
@@ -442,7 +484,7 @@ export class MapRenderer {
     }
 
     /**
-     * Hesaplanan rotayı çizer
+     * Hesaplanan rotayı çizer — Map lookup
      */
     drawRoute() {
         const ctx = this.ctx;
@@ -462,11 +504,11 @@ export class MapRenderer {
             
             // Glow efekti
             ctx.shadowColor = segment.lineColor;
-            ctx.shadowBlur = 12;
+            ctx.shadowBlur = 14;
             
             ctx.beginPath();
             for (let i = 0; i < stops.length; i++) {
-                const stop = this.cityData.stops.find(s => s.id === stops[i]);
+                const stop = this.stopsMap.get(stops[i]); // O(1)
                 if (!stop) continue;
                 
                 const p = this.mapToScreen(stop.x, stop.y);
@@ -484,7 +526,7 @@ export class MapRenderer {
         if (route.segments.length > 1) {
             for (let i = 0; i < route.segments.length - 1; i++) {
                 const transferStopId = route.segments[i].stops[route.segments[i].stops.length - 1];
-                const stop = this.cityData.stops.find(s => s.id === transferStopId);
+                const stop = this.stopsMap.get(transferStopId); // O(1)
                 if (!stop) continue;
                 
                 const p = this.mapToScreen(stop.x, stop.y);
@@ -507,7 +549,7 @@ export class MapRenderer {
                 ctx.font = 'bold 12px Inter, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillStyle = '#0f1724';
+                ctx.fillStyle = '#080e1c';
                 ctx.fillText('↔', p.x, p.y);
                 
                 // Etiket
@@ -523,7 +565,7 @@ export class MapRenderer {
     }
 
     /**
-     * Rota üzerinde hareket eden animasyonlu nokta
+     * Rota üzerinde hareket eden animasyonlu nokta — Map lookup
      */
     drawRouteAnimation(route) {
         const ctx = this.ctx;
@@ -535,8 +577,8 @@ export class MapRenderer {
         const segLengths = [];
         
         for (let i = 0; i < allStops.length - 1; i++) {
-            const s1 = this.cityData.stops.find(s => s.id === allStops[i]);
-            const s2 = this.cityData.stops.find(s => s.id === allStops[i + 1]);
+            const s1 = this.stopsMap.get(allStops[i]); // O(1)
+            const s2 = this.stopsMap.get(allStops[i + 1]); // O(1)
             if (!s1 || !s2) { segLengths.push(0); continue; }
             
             const p1 = this.mapToScreen(s1.x, s1.y);
@@ -556,8 +598,8 @@ export class MapRenderer {
         for (let i = 0; i < segLengths.length; i++) {
             if (accumulated + segLengths[i] >= targetDist) {
                 const localT = (targetDist - accumulated) / segLengths[i];
-                const s1 = this.cityData.stops.find(s => s.id === allStops[i]);
-                const s2 = this.cityData.stops.find(s => s.id === allStops[i + 1]);
+                const s1 = this.stopsMap.get(allStops[i]); // O(1)
+                const s2 = this.stopsMap.get(allStops[i + 1]); // O(1)
                 if (!s1 || !s2) break;
                 
                 const p1 = this.mapToScreen(s1.x, s1.y);
@@ -595,8 +637,8 @@ export class MapRenderer {
         const ctx = this.ctx;
         const p = this.mapToScreen(stop.x, stop.y);
         
-        // Hangi hatlara ait?
-        const stopLines = this.cityData.lines.filter(l => l.stops.includes(stop.id));
+        // Hangi hatlara ait? (cache)
+        const stopLines = this.stopLinesCache.get(stop.id) || [];
         const lineNames = stopLines.map(l => l.name).join(', ');
         
         const text1 = stop.name;
@@ -610,7 +652,7 @@ export class MapRenderer {
         const w3 = ctx.measureText(text3).width;
         
         const boxWidth = Math.max(w1, w2, w3) + 24;
-        const boxHeight = 62;
+        const boxHeight = 66;
         
         let boxX = p.x - boxWidth / 2;
         let boxY = p.y - boxHeight - 18;
@@ -620,14 +662,21 @@ export class MapRenderer {
         if (boxX + boxWidth > this.displayWidth - 5) boxX = this.displayWidth - boxWidth - 5;
         if (boxY < 5) boxY = p.y + 18;
         
-        // Arka plan
-        ctx.fillStyle = '#1e293bee';
-        ctx.strokeStyle = '#475569';
+        // Arka plan — glassmorphism efekti
+        ctx.fillStyle = '#131c2eee';
+        ctx.strokeStyle = '#3b82f640';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        this.roundRect(ctx, boxX, boxY, boxWidth, boxHeight, 8);
+        this.roundRect(ctx, boxX, boxY, boxWidth, boxHeight, 10);
         ctx.fill();
         ctx.stroke();
+        
+        // Üst gradient çizgi
+        const gradLine = ctx.createLinearGradient(boxX, boxY, boxX + boxWidth, boxY);
+        gradLine.addColorStop(0, '#3b82f6');
+        gradLine.addColorStop(1, '#8b5cf6');
+        ctx.fillStyle = gradLine;
+        ctx.fillRect(boxX + 1, boxY + 1, boxWidth - 2, 2);
         
         // Metin
         ctx.textAlign = 'left';
@@ -635,16 +684,16 @@ export class MapRenderer {
         
         ctx.font = 'bold 12px Inter, sans-serif';
         ctx.fillStyle = '#f1f5f9';
-        ctx.fillText(text1, boxX + 12, boxY + 8);
+        ctx.fillText(text1, boxX + 12, boxY + 10);
         
         ctx.font = '10px Inter, sans-serif';
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillText(text2, boxX + 12, boxY + 26);
+        ctx.fillStyle = '#64748b';
+        ctx.fillText(text2, boxX + 12, boxY + 28);
         
         // Hat renkleri
         let hatX = boxX + 12;
-        ctx.fillStyle = '#cbd5e1';
-        ctx.fillText(text3, hatX, boxY + 42);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(text3, hatX, boxY + 44);
     }
 
     /**
@@ -701,7 +750,7 @@ export class MapRenderer {
     }
 
     /**
-     * Araçları çizer
+     * Araçları çizer — Map lookup
      */
     drawVehicles() {
         const ctx = this.ctx;
@@ -715,8 +764,8 @@ export class MapRenderer {
             const segs = [];
             
             for (let i = 0; i < stops.length - 1; i++) {
-                const s1 = this.cityData.stops.find(s => s.id === stops[i]);
-                const s2 = this.cityData.stops.find(s => s.id === stops[i + 1]);
+                const s1 = this.stopsMap.get(stops[i]); // O(1)
+                const s2 = this.stopsMap.get(stops[i + 1]); // O(1)
                 if (!s1 || !s2) { segs.push(0); continue; }
                 
                 const dx = s2.x - s1.x;
@@ -737,8 +786,8 @@ export class MapRenderer {
                     const localT = segs[i] > 0 ? 
                         Math.min(1, (targetDist - acc) / segs[i]) : 0;
                     
-                    const s1 = this.cityData.stops.find(s => s.id === stops[i]);
-                    const s2 = this.cityData.stops.find(s => s.id === stops[i + 1]);
+                    const s1 = this.stopsMap.get(stops[i]); // O(1)
+                    const s2 = this.stopsMap.get(stops[i + 1]); // O(1)
                     if (!s1 || !s2) break;
                     
                     const p1 = this.mapToScreen(s1.x, s1.y);
@@ -781,15 +830,22 @@ export class MapRenderer {
 
     setSelectedStops(stops) {
         this.selectedStops = stops;
+        this._selectedStopSet = new Set(stops);
     }
 
     setKnnResults(results, queryPoint) {
         this.knnResults = results || [];
         this.knnQueryPoint = queryPoint || null;
+        this._knnResultIds = new Set(this.knnResults.map(r => r.id));
     }
 
     setRouteResult(result) {
         this.routeResult = result;
+        if (result && result.found && result.path) {
+            this._routePathIds = new Set(result.path);
+        } else {
+            this._routePathIds = new Set();
+        }
     }
 
     clearAll() {
@@ -797,6 +853,71 @@ export class MapRenderer {
         this.knnQueryPoint = null;
         this.routeResult = null;
         this.selectedStops = [];
+        this._knnResultIds = new Set();
+        this._routePathIds = new Set();
+        this._selectedStopSet = new Set();
+    }
+
+    resetView() {
+        this.initialized = false;
+        this.resize();
+    }
+
+    /**
+     * Pan handling methods
+     */
+    startPan(clientX, clientY) {
+        this.isDragging = true;
+        this.dragStartX = clientX;
+        this.dragStartY = clientY;
+        this.lastOffsetX = this.offsetX;
+        this.lastOffsetY = this.offsetY;
+        this.canvas.style.cursor = 'grabbing';
+    }
+
+    updatePan(clientX, clientY) {
+        if (!this.isDragging) return false;
+        
+        const dx = clientX - this.dragStartX;
+        const dy = clientY - this.dragStartY;
+        
+        this.offsetX = this.lastOffsetX + dx;
+        this.offsetY = this.lastOffsetY + dy;
+        return true; // indicates pan happened
+    }
+
+    endPan() {
+        this.isDragging = false;
+        this.canvas.style.cursor = this.hoveredStop ? 'pointer' : 'crosshair';
+    }
+
+    /**
+     * Zoom handling
+     */
+    handleZoom(clientX, clientY, deltaY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const sx = clientX - rect.left;
+        const sy = clientY - rect.top;
+        
+        // Fare altındaki harita koordinatını bul
+        const mapPos = this.screenToMap(sx, sy);
+        
+        // Zoom faktörünü belirle (scroll yönüne göre)
+        const zoomIntensity = 0.1;
+        const zoomFactor = deltaY < 0 ? (1 + zoomIntensity) : (1 - zoomIntensity);
+        
+        let newScale = this.scaleX * zoomFactor;
+        
+        // Limitler
+        newScale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+        
+        // Yeni ölçeği uygula
+        this.scaleX = newScale;
+        this.scaleY = newScale;
+        
+        // Offseti güncelle: farenin altındaki nokta sabit kalmalı
+        this.offsetX = sx - (mapPos.x * this.scaleX);
+        this.offsetY = sy - (mapPos.y * this.scaleY);
     }
 
     /**

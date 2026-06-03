@@ -75,8 +75,35 @@ class TransitApp {
         // --- Canvas fare çıkışı ---
         this.canvas.addEventListener('mouseleave', () => {
             this.renderer.setHoveredStop(null);
+            this.renderer.endPan();
             this.canvas.style.cursor = 'crosshair';
         });
+        
+        // --- Canvas Sürükleme (Pan) ---
+        this.canvas.addEventListener('mousedown', (e) => {
+            // Sadece durak seçilmiyorsa pan yap
+            const rect = this.canvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            const stop = this.renderer.findStopAtScreen(sx, sy, 20);
+            
+            if (!stop) {
+                this.renderer.startPan(e.clientX, e.clientY);
+            }
+        });
+        
+        this.canvas.addEventListener('mouseup', () => {
+            if (this.renderer.isDragging) {
+                this.renderer.endPan();
+            }
+        });
+        
+        // --- Canvas Scroll (Zoom) ---
+        this.canvas.addEventListener('wheel', (e) => {
+            e.preventDefault(); // Sayfanın kaymasını engelle
+            this.renderer.handleZoom(e.clientX, e.clientY, e.deltaY);
+        }, { passive: false });
+
         
         // --- Mod seçimi ---
         document.querySelectorAll('input[name="mode"]').forEach(radio => {
@@ -138,6 +165,9 @@ class TransitApp {
     // ============================================================
     
     handleCanvasClick(e) {
+        // Eğer sürükleme (pan) yaptıysak, tıklama (seçim) olarak algılama
+        if (this.renderer.isDragging) return;
+        
         const rect = this.canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
@@ -153,6 +183,12 @@ class TransitApp {
     }
     
     handleCanvasMouseMove(e) {
+        // Eğer sürükleniyorsa, pan işlemini yap
+        if (this.renderer.isDragging) {
+            this.renderer.updatePan(e.clientX, e.clientY);
+            return;
+        }
+
         const rect = this.canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
@@ -195,7 +231,7 @@ class TransitApp {
     displayKnnResults(result) {
         const container = document.getElementById('results-content');
         
-        let html = `<div class="stats-box">
+        let html = `<div class="stats-box route-summary">
             <div class="stats-title">📍 KNN Arama Sonuçları</div>
             <div class="stats-row">
                 <span>Algoritma:</span><span>${result.stats.algorithm}</span>
@@ -410,77 +446,223 @@ class TransitApp {
             
             // Aktarma bilgisi
             if (i < result.segments.length - 1) {
-                html += `<div class="transfer-badge">
-                    ↕ Aktarma
-                </div>`;
+                html += `<div class="transfer-badge">Aktarma</div>`;
             }
         }
         html += '</div>';
         
-        // Algoritma karşılaştırması
-        html += `<div class="stats-box comparison">
-            <div class="stats-title">📊 Algoritma Karşılaştırması</div>
-            <table class="comp-table">
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>${result.stats.algorithm}</th>
-                        <th>${compResult.stats.algorithm}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Süre (ms)</td>
-                        <td>${result.stats.executionTimeMs}</td>
-                        <td>${compResult.stats.executionTimeMs}</td>
-                    </tr>
-                    <tr>
-                        <td>Ziyaret Edilen</td>
-                        <td>${result.stats.nodesVisited}</td>
-                        <td>${compResult.stats.nodesVisited}</td>
-                    </tr>
-                    <tr>
-                        <td>İncelenen Kenar</td>
-                        <td>${result.stats.edgesExamined}</td>
-                        <td>${compResult.stats.edgesExamined}</td>
-                    </tr>
-                    <tr>
-                        <td>Maliyet</td>
-                        <td>${result.totalCost.toFixed(1)}</td>
-                        <td>${compResult.totalCost >= 0 ? compResult.totalCost.toFixed(1) : '∞'}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>`;
-        
-        // Karmaşıklık analizi
-        html += `<div class="stats-box">
-            <div class="stats-title">📐 Karmaşıklık Analizi</div>
-            <div class="complexity-info">
-                <div class="complexity-row">
-                    <span class="complexity-label">Dijkstra</span>
-                    <span class="complexity-value">O((V+E) log V)</span>
-                </div>
-                <div class="complexity-row">
-                    <span class="complexity-label">A*</span>
-                    <span class="complexity-value">O((V+E) log V) *</span>
-                </div>
-                <div class="complexity-note">
-                    * Heuristik sayesinde pratikte daha az düğüm ziyaret eder
-                </div>
-                <div class="complexity-row">
-                    <span class="complexity-label">V (düğüm)</span>
-                    <span class="complexity-value">${result.stats.totalVertices}</span>
-                </div>
-                <div class="complexity-row">
-                    <span class="complexity-label">Verimlilik</span>
-                    <span class="complexity-value">${((result.stats.nodesVisited / result.stats.totalVertices) * 100).toFixed(1)}%</span>
-                </div>
-            </div>
-        </div>`;
+        // ============================================================
+        // ALGORİTMA KARŞILAŞTIRMASI - PREMİUM GÖRSEL
+        // ============================================================
+        html += this.buildAlgorithmComparison(result, compResult);
         
         container.innerHTML = html;
         document.getElementById('results-panel').classList.add('visible');
+    }
+
+    /**
+     * Algoritma karşılaştırma bölümünü oluşturur - detaylı ve görsel
+     */
+    buildAlgorithmComparison(result, compResult) {
+        const algoA = result.stats;
+        const algoB = compResult.stats;
+
+        // Determine winner by node visits (fewer = better for same cost)
+        const aNodes = algoA.nodesVisited;
+        const bNodes = algoB.nodesVisited;
+        const aEdges = algoA.edgesExamined;
+        const bEdges = algoB.edgesExamined;
+        const aTime = algoA.executionTimeMs;
+        const bTime = algoB.executionTimeMs;
+        const aHeap = algoA.heapInsertions || 0;
+        const bHeap = algoB.heapInsertions || 0;
+
+        const aIsDijkstra = algoA.algorithm.includes('Dijkstra');
+        const bIsDijkstra = algoB.algorithm.includes('Dijkstra');
+
+        // Winner by total score (lower nodes = better)
+        const nodeWinner = aNodes <= bNodes ? 'a' : 'b';
+        const edgeWinner = aEdges <= bEdges ? 'a' : 'b';
+
+        // Calculate percentage differences
+        const maxNodes = Math.max(aNodes, bNodes, 1);
+        const maxEdges = Math.max(aEdges, bEdges, 1);
+        const maxHeap = Math.max(aHeap, bHeap, 1);
+
+        const nodeSavingPerc = maxNodes > 0 ? 
+            Math.abs(((maxNodes - Math.min(aNodes, bNodes)) / maxNodes) * 100).toFixed(0) : 0;
+        const edgeSavingPerc = maxEdges > 0 ? 
+            Math.abs(((maxEdges - Math.min(aEdges, bEdges)) / maxEdges) * 100).toFixed(0) : 0;
+
+        let html = `<div class="comparison-section">
+            <div class="stats-title" style="margin-bottom: 14px;">⚡ Algoritma Karşılaştırması</div>`;
+
+        // Algorithm Cards
+        html += `<div class="algo-cards">
+            <div class="algo-card ${nodeWinner === 'a' ? 'winner' : 'loser'}">
+                <div class="algo-card-name">
+                    <span class="algo-badge ${aIsDijkstra ? 'dijkstra' : 'astar'}">${algoA.algorithm}</span>
+                </div>
+                <div class="algo-stat-list">
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">Süre</span>
+                        <span class="algo-stat-value time">${aTime} ms</span>
+                    </div>
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">Ziyaret Edilen</span>
+                        <span class="algo-stat-value">${aNodes}</span>
+                    </div>
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">İncelenen Kenar</span>
+                        <span class="algo-stat-value">${aEdges}</span>
+                    </div>
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">Heap Ekleme</span>
+                        <span class="algo-stat-value">${aHeap}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="algo-card ${nodeWinner === 'b' ? 'winner' : 'loser'}">
+                <div class="algo-card-name">
+                    <span class="algo-badge ${bIsDijkstra ? 'dijkstra' : 'astar'}">${algoB.algorithm}</span>
+                </div>
+                <div class="algo-stat-list">
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">Süre</span>
+                        <span class="algo-stat-value time">${bTime} ms</span>
+                    </div>
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">Ziyaret Edilen</span>
+                        <span class="algo-stat-value">${bNodes}</span>
+                    </div>
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">İncelenen Kenar</span>
+                        <span class="algo-stat-value">${bEdges}</span>
+                    </div>
+                    <div class="algo-stat">
+                        <span class="algo-stat-label">Heap Ekleme</span>
+                        <span class="algo-stat-value">${bHeap}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+        // Bar Chart Comparison
+        const aPct_nodes = (aNodes / maxNodes * 100).toFixed(0);
+        const bPct_nodes = (bNodes / maxNodes * 100).toFixed(0);
+        const aPct_edges = (aEdges / maxEdges * 100).toFixed(0);
+        const bPct_edges = (bEdges / maxEdges * 100).toFixed(0);
+        const aPct_heap = (aHeap / maxHeap * 100).toFixed(0);
+        const bPct_heap = (bHeap / maxHeap * 100).toFixed(0);
+
+        const aLabel = aIsDijkstra ? 'Dijkstra' : 'A*';
+        const bLabel = bIsDijkstra ? 'Dijkstra' : 'A*';
+        const aClass = aIsDijkstra ? 'dijkstra' : 'astar';
+        const bClass = bIsDijkstra ? 'dijkstra' : 'astar';
+
+        html += `<div class="comparison-bars">
+            <div class="stats-title" style="font-size: 11px; margin-bottom: 4px;">📊 Görsel Karşılaştırma</div>
+
+            <div class="comparison-bar-item">
+                <div class="comparison-bar-label">
+                    <span>Ziyaret Edilen Düğüm</span>
+                    <span style="color: var(--accent-success); font-weight: 600;">%${nodeSavingPerc} fark</span>
+                </div>
+                <div class="comparison-bar-tracks">
+                    <div class="comparison-bar-track">
+                        <span class="comparison-bar-algo">${aLabel}</span>
+                        <div class="comparison-bar-bg">
+                            <div class="comparison-bar-fill ${aClass} ${nodeWinner === 'a' ? 'winner-bar' : ''}" style="width: ${Math.max(aPct_nodes, 8)}%">
+                                <span class="comparison-bar-value">${aNodes}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="comparison-bar-track">
+                        <span class="comparison-bar-algo">${bLabel}</span>
+                        <div class="comparison-bar-bg">
+                            <div class="comparison-bar-fill ${bClass} ${nodeWinner === 'b' ? 'winner-bar' : ''}" style="width: ${Math.max(bPct_nodes, 8)}%">
+                                <span class="comparison-bar-value">${bNodes}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="comparison-bar-item">
+                <div class="comparison-bar-label">
+                    <span>İncelenen Kenar</span>
+                    <span style="color: var(--accent-success); font-weight: 600;">%${edgeSavingPerc} fark</span>
+                </div>
+                <div class="comparison-bar-tracks">
+                    <div class="comparison-bar-track">
+                        <span class="comparison-bar-algo">${aLabel}</span>
+                        <div class="comparison-bar-bg">
+                            <div class="comparison-bar-fill ${aClass} ${edgeWinner === 'a' ? 'winner-bar' : ''}" style="width: ${Math.max(aPct_edges, 8)}%">
+                                <span class="comparison-bar-value">${aEdges}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="comparison-bar-track">
+                        <span class="comparison-bar-algo">${bLabel}</span>
+                        <div class="comparison-bar-bg">
+                            <div class="comparison-bar-fill ${bClass} ${edgeWinner === 'b' ? 'winner-bar' : ''}" style="width: ${Math.max(bPct_edges, 8)}%">
+                                <span class="comparison-bar-value">${bEdges}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="comparison-bar-item">
+                <div class="comparison-bar-label">
+                    <span>Min-Heap Ekleme</span>
+                </div>
+                <div class="comparison-bar-tracks">
+                    <div class="comparison-bar-track">
+                        <span class="comparison-bar-algo">${aLabel}</span>
+                        <div class="comparison-bar-bg">
+                            <div class="comparison-bar-fill ${aClass}" style="width: ${Math.max(aPct_heap, 8)}%">
+                                <span class="comparison-bar-value">${aHeap}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="comparison-bar-track">
+                        <span class="comparison-bar-algo">${bLabel}</span>
+                        <div class="comparison-bar-bg">
+                            <div class="comparison-bar-fill ${bClass}" style="width: ${Math.max(bPct_heap, 8)}%">
+                                <span class="comparison-bar-value">${bHeap}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+        // Verdict
+        const winnerName = nodeWinner === 'a' ? algoA.algorithm : algoB.algorithm;
+        const loserName = nodeWinner === 'a' ? algoB.algorithm : algoA.algorithm;
+        const winnerNodes = nodeWinner === 'a' ? aNodes : bNodes;
+        const loserNodes = nodeWinner === 'a' ? bNodes : aNodes;
+        const isAStar = winnerName.includes('A*');
+
+        html += `<div class="algo-verdict">
+            <div class="algo-verdict-title">📋 Sonuç Analizi</div>
+            <div class="algo-verdict-text">
+                <strong>${winnerName}</strong>, bu rota için <span class="perc">%${nodeSavingPerc}</span> daha az düğüm ziyaret ederek daha verimli çalıştı.
+                ${isAStar ? 
+                    `<br>A* heuristik fonksiyonu sayesinde arama alanını daraltarak hedefle ilgisiz düğümleri elemektedir.` : 
+                    `<br>Dijkstra'nın tam tarama yaklaşımı bu rotada daha az düğüme ulaşarak çözüme varmıştır.`
+                }
+                <br><br>
+                <strong>Karmaşıklık:</strong> Her iki algoritma da <span style="color:var(--accent-secondary); font-family:'JetBrains Mono',monospace; font-weight:600;">O((V+E) log V)</span> karmaşıklığındadır.
+                A*'ın heuristik avantajı pratikte daha az düğüm ziyaret etmesiyle ortaya çıkar.
+                <br>
+                <strong>V =</strong> ${algoA.totalVertices} düğüm
+            </div>
+        </div>`;
+
+        html += '</div>';
+        return html;
     }
 
     // ============================================================
@@ -533,7 +715,7 @@ class TransitApp {
                 <div class="line-color" style="background:${line.color}"></div>
                 <span class="line-icon">${typeIcon}</span>
                 <span class="line-name">${line.name}</span>
-                <span class="line-stop-count">${line.stops.length} durak</span>
+                <span class="line-stop-count">${line.stops.length}</span>
             </div>`;
         }
         

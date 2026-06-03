@@ -22,7 +22,13 @@ namespace SmartTransit.Infrastructure
             var previous = new Dictionary<RouteState, (RouteState PrevState, TransitEdge Edge)>();
             var minHeap = new PriorityQueue<RouteState, double>();
 
+            // İstatistik sayaçları
+            int nodesVisited = 0;
+            int edgesExamined = 0;
+            int heapInsertions = 0;
+
             minHeap.Enqueue(start, Heuristic(graph.Stops.Get(request.StartStopId), targetStop));
+            heapInsertions++;
 
             var visited = new HashSet<RouteState>();
             RouteState? bestEndState = null;
@@ -32,6 +38,7 @@ namespace SmartTransit.Infrastructure
             {
                 if (visited.Contains(current)) continue;
                 visited.Add(current);
+                nodesVisited++;
 
                 if (current.StopId == request.EndStopId && gScore[current] < bestEndCost)
                 {
@@ -49,6 +56,8 @@ namespace SmartTransit.Infrastructure
                 {
                     var nextState = new RouteState(edge.ToStopId, edge.LineId);
                     if (visited.Contains(nextState)) continue;
+
+                    edgesExamined++;
 
                     double transferPenalty = 0;
                     if (current.CurrentLineId != null && edge.LineId != current.CurrentLineId)
@@ -68,6 +77,7 @@ namespace SmartTransit.Infrastructure
                         double f = tentativeG + h;
 
                         minHeap.Enqueue(nextState, f);
+                        heapInsertions++;
                     }
                 }
             }
@@ -77,7 +87,7 @@ namespace SmartTransit.Infrastructure
                 throw new InvalidOperationException("No route could be found between the selected stops.");
             }
 
-            return BuildResult(previous, bestEndState, bestEndCost);
+            return BuildResult(previous, bestEndState, bestEndCost, nodesVisited, edgesExamined, heapInsertions);
         }
 
         private double Heuristic(Stop stopA, Stop stopB)
@@ -94,7 +104,10 @@ namespace SmartTransit.Infrastructure
         private static RouteResult BuildResult(
             IReadOnlyDictionary<RouteState, (RouteState PrevState, TransitEdge Edge)> previous,
             RouteState bestEndState,
-            double bestEndCost)
+            double bestEndCost,
+            int nodesVisited,
+            int edgesExamined,
+            int heapInsertions)
         {
             var steps = new List<RouteStep>();
             var stopIds = new List<int> { bestEndState.StopId };
@@ -118,7 +131,10 @@ namespace SmartTransit.Infrastructure
                 PathStopIds = stopIds,
                 Steps = steps,
                 TotalMinutes = totalMinutes,
-                TotalCost = bestEndCost
+                TotalCost = bestEndCost,
+                NodesVisited = nodesVisited,
+                EdgesExamined = edgesExamined,
+                HeapInsertions = heapInsertions
             };
         }
 

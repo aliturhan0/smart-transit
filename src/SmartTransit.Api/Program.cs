@@ -221,6 +221,7 @@ app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRout
         ? dijkstraPlanner 
         : aStarPlanner;
     RouteResult compResult;
+    var compStartTime = DateTime.UtcNow;
     try
     {
         compResult = compPlanner.FindShortestPath(g, routeRequest);
@@ -235,6 +236,7 @@ app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRout
             TotalMinutes = 0 
         };
     }
+    var compExecutionTimeMs = (DateTime.UtcNow - compStartTime).TotalMilliseconds;
 
     // Reconstruct the response matching the frontend expectations
     var pathStopIds = result.PathStopIds.Select(id => $"S{id:D2}").ToList();
@@ -358,8 +360,9 @@ app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRout
         algorithm = request.Algorithm.ToLower() == "astar" ? "C# A*" : "C# Dijkstra",
         criterion = request.Criterion,
         transferPenalty = request.TransferPenalty,
-        nodesVisited = result.Steps.Count + 1, // Approximation for UI display
-        edgesExamined = result.Steps.Count * 2,
+        nodesVisited = result.NodesVisited,
+        edgesExamined = result.EdgesExamined,
+        heapInsertions = result.HeapInsertions,
         totalVertices = g.Stops.Size,
         executionTimeMs = Math.Round(executionTimeMs, 3)
     };
@@ -369,10 +372,11 @@ app.MapPost("/api/route", (RouteApiRequest request, TransitGraph g, DijkstraRout
         algorithm = request.Algorithm.ToLower() == "astar" ? "C# Dijkstra" : "C# A*",
         criterion = request.Criterion,
         transferPenalty = request.TransferPenalty,
-        nodesVisited = compResult.Steps != null ? compResult.Steps.Count + 1 : 0,
-        edgesExamined = compResult.Steps != null ? compResult.Steps.Count * 2 : 0,
+        nodesVisited = compResult.NodesVisited,
+        edgesExamined = compResult.EdgesExamined,
+        heapInsertions = compResult.HeapInsertions,
         totalVertices = g.Stops.Size,
-        executionTimeMs = 0.0 // Handled client side or ignored
+        executionTimeMs = Math.Round(compExecutionTimeMs, 3)
     };
 
     return Results.Ok(new

@@ -18,13 +18,21 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
         var previous = new Dictionary<RouteState, (RouteState PrevState, TransitEdge Edge)>();
         var queue = new PriorityQueue<RouteState, double>();
 
+        // İstatistik sayaçları
+        int nodesVisited = 0;
+        int edgesExamined = 0;
+        int heapInsertions = 0;
+
         queue.Enqueue(start, 0);
+        heapInsertions++;
 
         RouteState? bestEndState = null;
         double bestEndCost = double.PositiveInfinity;
 
         while (queue.TryDequeue(out var current, out var cost))
         {
+            nodesVisited++;
+
             if (!distances.TryGetValue(current, out var knownCost) || cost > knownCost)
             {
                 continue;
@@ -43,6 +51,8 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
 
             foreach (var edge in edges)
             {
+                edgesExamined++;
+
                 var transferPenalty = 0d;
                 if (current.CurrentLineId is not null && current.CurrentLineId != edge.LineId)
                 {
@@ -58,6 +68,7 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
                     distances[nextState] = nextCost;
                     previous[nextState] = (current, edge);
                     queue.Enqueue(nextState, nextCost);
+                    heapInsertions++;
                 }
             }
         }
@@ -67,13 +78,16 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
             throw new InvalidOperationException("No route could be found between the selected stops.");
         }
 
-        return BuildResult(previous, bestEndState, bestEndCost);
+        return BuildResult(previous, bestEndState, bestEndCost, nodesVisited, edgesExamined, heapInsertions);
     }
 
     private static RouteResult BuildResult(
         IReadOnlyDictionary<RouteState, (RouteState PrevState, TransitEdge Edge)> previous,
         RouteState bestEndState,
-        double bestEndCost)
+        double bestEndCost,
+        int nodesVisited,
+        int edgesExamined,
+        int heapInsertions)
     {
         var steps = new List<RouteStep>();
         var stopIds = new List<int> { bestEndState.StopId };
@@ -97,7 +111,10 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
             PathStopIds = stopIds,
             Steps = steps,
             TotalMinutes = totalMinutes,
-            TotalCost = bestEndCost
+            TotalCost = bestEndCost,
+            NodesVisited = nodesVisited,
+            EdgesExamined = edgesExamined,
+            HeapInsertions = heapInsertions
         };
     }
 

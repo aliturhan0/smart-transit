@@ -1,0 +1,12 @@
+PROJE: Akıllı Toplu Taşıma ve Navigasyon Sistemi
+ARA RAPOR TESLİM BELGESİ
+
+GitHub Repository Link:
+https://github.com/aliturhan0/smart-transit.git
+
+Geliştirici Ekibi:
+- Ali Turhan
+- Tuğçe Adışen
+- Mehmet Çetin
+
+Tarih: 30.04.2026
