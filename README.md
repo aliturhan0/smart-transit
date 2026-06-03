@@ -14,83 +14,60 @@
 ---
 
 ## 👥 Proje Geliştirme Ekibi (Grup 5)
-Sistem mimarisi, veri yapıları kodlaması ve Code Defense (kod savunması) gereksinimleri doğrultusunda aşağıdaki ekip üyeleri tarafından geliştirilmiştir:
-- **Ali Turhan:** Uzamsal Veri Yapıları (KD-Tree), Arayüz Geliştirme, Sistem Entegrasyonu
-- **Tuğçe Adışen:** Veri Arama Algoritmaları (Hash Table), Dijkstra Rotalama Optimizasyonu
-- **Mehmet Çetin:** Ağ Modellemesi (Multigraph), A* (A-Star) Algoritması, Heuristik Hesaplamalar
+- **Ali Turhan:** Uzamsal Veri Yapıları, Arayüz Geliştirme, Sistem Entegrasyonu
+- **Tuğçe Adışen:** Veri Arama Algoritmaları, Dijkstra Rotalama Optimizasyonu
+- **Mehmet Çetin:** Ağ Modellemesi, A* (A-Star) Algoritması, Heuristik Hesaplamalar
 
 ---
 
-## 🎯 1. Senaryo ve Temel Amaç
-Bu projenin temel senaryosu, büyük bir şehrin karmaşık toplu taşıma ağının (Metro, Tramvay, Otobüs) matematiksel bir model üzerinden incelenmesi ve kullanıcılara gerçek zamanlı navigasyon imkanı sunulmasıdır. 
+## 🎯 1. Projenin Amacı ve Temel Senaryosu
 
-Sistemde;
-- **Duraklar (Stops):** Graf üzerindeki düğümler (Vertex)
-- **Güzergahlar (Lines):** Duraklar arasındaki mesafe, süre ve hat bilgisi taşıyan kenarlar (Edge)
-olarak modellenmiştir.
+Günümüz büyükşehirlerinde toplu taşıma ağları (metro, tramvay ve otobüs hatları) oldukça karmaşık bir yapıdadır. Yolcuların bir noktadan diğerine gitmek için hangi hatları kullanacaklarını, nerede aktarma yapacaklarını ve yolculuğun ne kadar süreceğini bilmeleri zordur.
 
-**Sistemin Temel Amaçları:**
-1. Kullanıcının tıkladığı (bulunduğu) konuma en yakın durakları anında bulmak.
-2. Karmaşık duraklar arası ağı "Graf" yapısı ile bilgisayar ortamında temsil etmek.
-3. Seçilen iki nokta (Başlangıç ve Hedef) arasındaki en uygun rotayı hesaplamak.
+**Akıllı Toplu Taşıma Sistemi** projesi, bu devasa şehir ağını sadeleştirilmiş bir matematiksel model (Graf) üzerinden ele alarak, yolculara akıllı ve optimize edilmiş seyahat rotaları sunmayı amaçlar.
+
+Sistemimiz; durakları birer **nokta (düğüm)**, aralarındaki hatları ise süre ve mesafe bilgisi taşıyan **bağlantılar (kenar)** olarak kabul eder. Bu sayede harita üzerinde yapılan tıklamalar anında algılanarak en mantıklı rota çizilir.
 
 ---
 
-## 🏗️ 2. Veri Yapıları Mimarisi (Faz 1)
+## 🚀 2. Projenin Kapsamı ve Geliştirilen Özellikler
 
-Projede yüksek performans elde etmek amacıyla klasik diziler (Array/List) yerine gelişmiş veri yapıları C# dilinde sıfırdan implemente edilmiştir.
+Sistemimiz sadece arka planda çalışan matematiksel bir modelden ibaret değildir; kullanıcıyla doğrudan etkileşime giren, zengin ve dinamik bir arayüze (Frontend) sahiptir.
 
-### 📍 2.1. Uzamsal Ağaç (KD-Tree / Spatial Tree)
-- **Görevi:** Harita üzerinde herhangi bir (x, y) koordinatına en yakın $K$ adet durağı bulmak (KNN).
-- **Maliyet / Performans:** Doğrusal tarama $O(N)$ yerine uzamsal düzlemi ikiye bölerek arama maliyetini **ortalama $O(\log N)$** seviyesine düşürür (En kötü durumda $O(N)$). 
-- **Projedeki Yeri:** Ekrana tıklandığı milisaniye içinde binlerce durak arasından en yakınları tespit edilir.
+### 📍 Dinamik Harita ve Konum Keşfi
+- **Etkileşimli Harita:** Kullanıcılar harita üzerinde istedikleri yere Zoom yapabilir (yakınlaşabilir) ve haritayı sürükleyerek (Pan) şehri gezebilirler.
+- **En Yakın Durakları Bulma (KNN):** Haritada rastgele boş bir noktaya tıklandığında, sistem o bölgeye en yakın durakları anında bulur ve turuncu renkli kesik çizgilerle ekranda vurgular.
 
-### 🕸️ 2.2. Çoklu Graf (Multigraph)
-- **Görevi:** Toplu taşıma ağını modellemek.
-- **Detay:** İki durak arasında aynı anda hem Otobüs hem Metro hattı olabileceği için normal bir graf yerine *Multigraph* kullanılmış ve her kenara Mesafe, Süre ve Hat Rengi/Adı özellikleri atanmıştır.
+### 🗺️ Akıllı Rota Hesaplama ve Görselleştirme
+- **Detaylı Güzergah Çizimi:** Başlangıç ve bitiş noktası seçildiğinde sistem rotayı hesaplar. Seçilen rota harita üzerinde boyanır. (Örn: Metro hatları mavi, otobüs hatları yeşil).
+- **Aktarma Noktaları:** Yolcunun araç değiştirmesi gereken istasyonlar özel ikonlarla haritada işaretlenir.
+- **Filtreleme ve Optimizasyon:** Rotayı hesaplarken kullanıcının tercihine göre "En Kısa Mesafe" veya "En Hızlı Süre" kriterleri seçilebilir. Ayrıca aktarma yapmanın getirdiği zaman kaybı (Aktarma Cezası) kullanıcının inisiyatifine bırakılmıştır.
 
-### ⚡ 2.3. Karma Tablo (Hash Table)
-- **Görevi:** Duraklara ve hatlara $O(1)$ yani anlık hızda erişmek.
-- **Detay:** Durak ID'si verildiğinde durak bilgisine (Adı, Koordinatı), Hat ID'si verildiğinde o hattın güzergahına zincirleme gecikmesi olmadan hızlı erişim sağlar.
-
-### 📉 2.4. Minimum Yığın (Min-Heap / Priority Queue)
-- **Görevi:** Rota algoritmalarında (Dijkstra ve A*) sırada incelenecek en düşük maliyetli düğümü tutmak.
-- **Maliyet / Performans:** Ekleme (Push) ve çıkarma (Pop) işlemleri algoritmaya **logaritmik zaman kazancı** ($O(\log N)$) sağlar.
+### 🤖 Yapay Zeka (AI) Seyahat Asistanı
+Projemizi sıradan bir harita uygulamasından ayıran en büyük özellik, **kendi mikroservisine sahip bir Yapay Zeka Asistanı** içermesidir.
+- Yolcunun rotası belli olduğunda, arka planda çalışan Python AI Servisi devreye girer.
+- Toplam süre, mesafe ve aktarma bilgileri doğrultusunda sistem yolcuya doğal dilde tavsiyeler üretir.
+- Örneğin: *"30 dakikalık uzun bir metro yolculuğunuz var, yanınıza kitap almanızı tavsiye ederiz"* veya *"1 aktarmanız bulunuyor, ineceğiniz durağı kaçırmamaya dikkat edin."*
 
 ---
 
-## 🧮 3. Algoritmalar ve Yardımcı AI Kullanımı (Faz 2)
+## 🛠️ 3. Arka Plan Mimarisi (Nasıl Çalışıyor?)
 
-Sistemdeki matematiksel arama motoru iki ana algoritma ve onları tamamlayan bir AI modülü üzerinden çalışır:
+Kullanıcının saniyeler içinde gördüğü bu akıcı deneyim, arka planda C# ile sıfırdan geliştirilmiş çok güçlü veri yapıları ve mikroservis mimarisine dayanmaktadır. 
 
-1. **K-Nearest Neighbors (KNN):** KD-Tree üzerinde çalışarak farenin konumuna en yakın durakları anında bulur.
-2. **Dijkstra Algoritması:** Graf üzerinde ağırlıklı en düşük maliyetli rotayı kesin olarak (BFS benzeri bir tarama ile) hesaplar.
-3. **A* (A-Star) Algoritması (Optimizasyon):** Dijkstra'nın aksine hedefe körleme gitmez. Hedefe olan kuş uçuşu mesafeyi (Heuristic) hesaba katarak aramayı daraltır. Pratikte Dijkstra'dan %40-%60 daha az düğüm ziyaret eder.
+1. **Uzamsal Ağaç (KD-Tree):** Haritada tıklanan bir noktaya en yakın durakları bulmak için tüm durakları tek tek aramak (doğrusal tarama) sistemi yavaşlatır. Bu yüzden veriler bir uzamsal ağaçta tutulur ve arama işlemi anında (logaritmik hızda) sonuçlanır.
+2. **Karma Tablolar (Hash Table):** Durakların ve hatların bilgilerine, tıpkı bir sözlükten kelime bulur gibi anında (O(1) hızında) erişilir.
+3. **Graf ve Yönlendirme Algoritmaları:** Şehir ağı bir **Multigraph** olarak tasarlanmıştır. Hedefe giden en kısa yolu bulmak için dünyaca ünlü **Dijkstra** ve **A* (A-Star)** algoritmaları kullanılmıştır.
 
-### 🧠 Rota Maliyet Modeli ve Yapay Zeka (LLM) Entegrasyonu
-Rota hesabı yapılırken sadece "Mesafe" değil, isteğe bağlı olarak "Süre" (En hızlı) veya "Aktarma Cezası" kriterleri devreye alınabilir.
-
-**Yapay Zeka (AI) Asistanı:** 
-C# tarafından hesaplanan rota (Süre, mesafe, aktarma sayısı), ayrı çalışan **Python FastAPI mikroservisine** iletilir. AI modülü, bu matamatiksel verileri kullanarak kullanıcıya *"1 aktarmanız var, 30 dakika sürecek, cam kenarına geçebilirsiniz"* tarzı doğal dilde bir tavsiye üretir.
+### 📊 Algoritma Karşılaştırma Modülü
+Kullanıcı bir rota oluşturduğunda, arayüzün sağ tarafında bir istatistik paneli açılır. Bu panelde Dijkstra ve A* algoritmalarının bu rotayı bulmak için ne kadar uğraştığı (kaç düğüm ziyaret ettikleri, kaç milisaniye harcadıkları) bar grafikleriyle karşılaştırmalı olarak kullanıcıya gösterilir. A*'ın sezgisel (kuş uçuşu) tahmin yeteneği sayesinde çoğu zaman Dijkstra'dan çok daha az işlem yaparak aynı sonuca ulaştığı görsel olarak kanıtlanır.
 
 ---
 
-## 🖥️ 4. Spesifik Arayüz ve Görselleştirme (Faz 3)
+## 🔌 4. Tek Tıkla Kurulum ve Docker Desteği
 
-Frontend (Arayüz), kullanıcı deneyimini maksimize eden, sadeleştirilmiş bir Canvas harita sistemi üzerine kuruludur.
+Farklı bilgisayarlarda yaşanan "bende çalışıyordu, sende neden bozuldu" sorunlarının önüne geçmek için tüm projemizi **Docker** mimarisiyle paketledik. 
 
-- **Konum Bazlı Arama:** Tıklanan noktaya en yakın duraklar turuncu hatlarla görsel olarak vurgulanır.
-- **Rota Görselleştirme:** Başlangıç ve bitiş seçildiğinde, hesaplanan rota renkleriyle (Metro için mavi, Otobüs için yeşil) haritada çizilir. Aktarma noktaları özel yuvarlak pinlerle belirtilir.
-- **Algoritma Karşılaştırması:** Hesaplama sonrasında ekranın sağında açılan sonuç panelinde, Dijkstra ve A* algoritmalarının çalışma süreleri, ziyaret ettikleri düğüm ve kenar sayıları bar grafikleriyle detaylı şekilde kapıştırılır.
-- **Performans Optimizasyonu:** Orta ölçekli (sentetik veya gerçek) veri setlerinde kasma olmaması için sadece gerekli hatlar ve aktif duraklar (`O(1)` Hash erişimiyle) filtre edilerek render edilir. Haritaya Zoom ve Pan (Kaydırma) yetenekleri eklenmiştir.
+Projenin C# Backend, Python AI Servisi ve Javascript Frontend arayüzü birbirinden izole konteynerler (mini sunucular) halinde tek bir komutla çalışmaktadır. Kurulumla uğraşmadan sistemi denemek için aşağıdaki rehbere göz atabilirsiniz:
 
----
-
-## 🚀 Başlangıç ve Kurulum Rehberi (Docker)
-
-Bu karmaşık yapı, kullanıcıların bilgisayarlarında sorunsuz çalışması için baştan uca **Docker** ile konteynerize edilmiştir. Program kurmanıza gerek yoktur.
-
-👉 **Lütfen projeyi çalıştırmak için [KURULUM_REHBERI.md](KURULUM_REHBERI.md) dosyasını okuyunuz.**
-
----
-> *Bu proje, veri yapılarının ve modern mikroservis mimarisinin (C#, Python, JS) entegre şekilde kullanıldığı bir çalışmadır.*
+👉 **[Tıklayın: KURULUM VE ÇALIŞTIRMA REHBERİ (KURULUM_REHBERI.md)](KURULUM_REHBERI.md)**
