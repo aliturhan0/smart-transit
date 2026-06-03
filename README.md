@@ -1,58 +1,43 @@
-<div align="center">
+# Akıllı Toplu Taşıma ve Navigasyon Sistemi
 
-# 🚇 Akıllı Toplu Taşıma ve Navigasyon Sistemi
-## 📊 Veri Yapıları Projesi - Ara Rapor (Nisan 2026)
+Bu proje, Veri Yapıları Dersi kapsamında geliştirilmiş, şehir içi toplu taşıma (metro, tramvay, otobüs) verileri üzerinde gerçek zamanlı navigasyon yapan yapay zeka destekli bir rota planlama sistemidir.
 
-<img src="https://img.shields.io/badge/Durum-Ara_Rapor-orange?style=for-the-badge" alt="Ara Rapor"/>
-<img src="https://img.shields.io/badge/Teslim_Tarihi-30.04.2026-blue?style=for-the-badge" alt="Tarih"/>
+## Proje Mimarisi (Microservices)
 
-</div>
+Proje, 3 ayrı bileşenin (mikroservis) birbiriyle asenkron şekilde haberleşmesi üzerine kuruludur:
 
----
+1. **Frontend (Nginx - Port 8888):** Vanilla JS, HTML ve CSS ile yazılmış, Canvas API kullanan yüksek performanslı harita görselleştiricisi.
+2. **C# Backend (ASP.NET Core - Port 5099):** Projenin kalbi olan algoritmaların (Dijkstra, A*, KD-Tree, HashTable) çalıştığı ve verinin önbelleklendiği sunucu.
+3. **AI Service (Python FastAPI - Port 8000):** C# Backend'den asenkron olarak çağrılan ve hesaplanan rotayı kullanarak yolcuya doğal dilde akıllı seyahat tavsiyeleri üreten mikroservis.
 
-## 📝 Özet ve Mevcut Durum
-Bu rapor, projenin ara teslim evresine kadar olan gelişimini, ekip içi iş bölümünü ve GitHub üzerindeki branch (şube) yönetimini belgelemektedir. Projenin temel algoritma altyapısı ve veri yapıları tamamlanmış olup, optimizasyon ve backend entegrasyon süreçlerine geçilmiştir.
+## Veri Yapıları ve Algoritmalar
 
----
+- **KD-Tree:** Haritaya tıklandığında O(log N) hızında en yakın (KNN) durakların bulunması için kullanılmıştır.
+- **HashTable:** Tüm durak ve hat erişimlerinin O(1) karmaşıklığında gerçekleşmesini sağlar. (Performans için C# Backend'de ve JS Map yapısı olarak Frontend'de)
+- **Min-Heap (Priority Queue):** A* ve Dijkstra rotalama algoritmalarında, sıradaki ziyaret edilecek en kısa yollu düğümü logaritmik hızda çekmek için tasarlanmıştır.
+- **Multigraph:** Duraklar arası bağlantıları temsil eden çoklu kenar destekli veri yapısı.
 
-## 👥 Ekip Çalışması ve Branch (Şube) Yönetimi
-Proje, ekip üyelerinin uzmanlık alanlarına göre ayrıldığı profesyonel bir iş akışına sahiptir. Aşağıda ekip üyelerinin kendi branch'ları üzerindeki çalışmaları listelenmiştir:
+*(Not: Geliştirici imzaları ve Code Defense gereksinimleri `src/SmartTransit.Domain` altındaki `.cs` dosyalarında mevcuttur)*
 
-| Ekip Üyesi | Şube (Branch) | Sorumluluk Alanı / Çalışma Detayları | Durum |
-|:--- |:--- |:--- |:--- |
-| **Ali Turhan** | `main` | KD-Tree Uzaysal İndeksleme, Canvas API Görselleştirme, Sentetik Veri Üretici ve Proje Entegrasyonu | ✅ Yayında |
-| **Tuğçe Adışen** | `Dijkstra` | DDD Mimari Kurulumu, .NET 10 PriorityQueue Tabanlı Dijkstra Implementasyonu ve API Geliştirme | 🛠️ Geliştiriliyor |
-| **Mehmet Çetin** | `feature/csharp-astar-algoritmasi` | Algoritmanın C# / Backend Porting Çalışmaları ve Mantıksal Doğrulama | 🚀 Yayında |
+## Sistemi Ayağa Kaldırmak (Docker)
 
----
+Tüm sistem, bağımlılık sorunları yaşanmadan **tek bir komutla** ayağa kalkacak şekilde Dockerize edilmiştir.
 
-## 🛠️ Teknik Bulgular ve Yapılan İyileştirmeler
+### Ön Koşullar
+- Sisteminize [Docker Desktop](https://www.docker.com/products/docker-desktop) kurulu ve çalışır durumda olmalıdır.
 
-### 1. Uzaysal Arama ve Görselleştirme (Ali Turhan)
-*   **KD-Tree Optimizasyonu:** 80+ durak ve karmaşık koordinat düzleminde $O(log N)$ sürede en yakın komşu araması (KNN) yapabilen 2-boyutlu ağaç yapısı optimize edildi.
-*   **Canvas API Entegrasyonu:** Büyük ölçekli graf yapılarını tarayıcıyı yormadan gerçek zamanlı render edebilen katmanlı görselleştirme motoru geliştirildi.
-*   **Veri Yönetimi:** Multigraph yapısındaki (metro, otobüs, tramvay) çakışmaları önleyen `hash-table` tabanlı durak indeksleme sistemi kuruldu.
+### Çalıştırma
 
-### 2. Kurumsal Backend Mimarisi ve Rota Planlama (Tuğçe Adışen)
-*   **DDD (Domain-Driven Design):** Projenin genişleyebilirliği için `Domain`, `Application` ve `Infrastructure` katmanlarından oluşan kurumsal mimari kuruldu.
-*   **Performanslı Dijkstra:** C# dilinin en yeni özelliklerinden biri olan `PriorityQueue<TElement, TPriority>` kullanılarak Dijkstra algoritması en verimli haliyle implement edildi.
-*   **API Altyapısı:** Frontend ile iletişim kuracak olan RESTful API servislerinin veri modelleri ve routing yapıları tasarlandı.
+Terminal veya komut istemcisinde (Command Prompt) projenin ana klasörüne gidin ve şu komutu çalıştırın:
 
-### 3. Çoklu Dil ve Algoritma Taşınabilirliği (Mehmet Çetin)
-*   JavaScript tarafındaki karmaşık rota maliyet modellerinin (aktarma cezası, yürüyüş mesafesi vb.) C# ortamına hatasız aktarımı sağlandı.
+```bash
+docker-compose up --build
+```
 
----
+Bu komut:
+1. Python bağımlılıklarını kurar.
+2. C# .NET 8 projesini restore edip derler.
+3. Frontend dosyalarını Nginx içine taşır.
 
-## 🚀 Sonraki Adımlar
-- [ ] Backend servislerinin frontend (Canvas API) ile tam entegrasyonu.
-- [ ] Gerçek zamanlı araç simülasyonu optimizasyonu.
-- [ ] Kullanıcı arayüzü (UI) final polish çalışmaları.
-
----
-
-<div align="center">
-
-**[GitHub Reposu Linki](https://github.com/aliturhan0/smart-transit.git)**
-*Bu rapor Bilgisayar Mühendisliği Veri Yapıları dersi ara teslimi için 30.04.2026 tarihinde hazırlanmıştır.*
-
-</div>
+Konteynerler ayağa kalktıktan sonra tarayıcınızdan **http://localhost:8888** adresine giderek sistemi kullanabilirsiniz.
+(C# Backend `localhost:5099`, Python AI servisi `localhost:8000` portunda çalışacaktır).

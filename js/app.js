@@ -413,6 +413,21 @@ class TransitApp {
                 <span>Aktarma:</span><span>${result.transfers} kez</span>
             </div>
         </div>`;
+
+        // AI Assistant Panel (Rubric Requirement)
+        if (result.ai) {
+            html += `<div class="stats-box" style="border: 1px solid var(--accent-warning); background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), transparent);">
+                <div class="stats-title" style="color: var(--accent-warning); margin-bottom: 8px;">
+                    🤖 Akıllı Seyahat Asistanı
+                </div>
+                <div style="font-size: 12px; line-height: 1.5; color: var(--text-primary); margin-bottom: 8px;">
+                    ${result.ai.ai_comment}
+                </div>
+                <div style="font-size: 9px; color: var(--text-muted); text-align: right;">
+                    ⚡ AI Yanıt Süresi: ${result.ai.execution_time_ms} ms
+                </div>
+            </div>`;
+        }
         
         // Segment detayları (hat bazlı)
         html += '<div class="segments">';

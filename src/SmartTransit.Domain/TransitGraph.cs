@@ -5,6 +5,9 @@ public sealed class TransitGraph
     private readonly HashTable<int, Stop> _stops = new();
     private readonly HashTable<int, List<TransitEdge>> _adjacency = new();
 
+    // Code Defense gereksinimi: Geliştirici imzası
+    public string DeveloperMehmetCetin => "Mehmet Cetin";
+
     public HashTable<int, Stop> Stops => _stops;
     public HashTable<int, List<TransitEdge>> Adjacency => _adjacency;
 

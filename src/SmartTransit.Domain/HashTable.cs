@@ -22,6 +22,9 @@ namespace SmartTransit.Domain
         private int _capacity;
         private readonly double _loadFactorThreshold = 0.75;
 
+        // Code Defense gereksinimi: Geliştirici imzası
+        public string DeveloperTugceAdisen => "Tugce Adisen";
+
         public int Size => _size;
         public int Capacity => _capacity;
 
