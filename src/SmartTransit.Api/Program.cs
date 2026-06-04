@@ -192,9 +192,19 @@ app.MapPost("/api/route", async (RouteApiRequest request, TransitGraph g, Dijkst
     int startId = int.Parse(request.StartStopId.Replace("S", ""));
     int endId = int.Parse(request.EndStopId.Replace("S", ""));
 
+    var criterion = request.Criterion?.ToLowerInvariant() switch
+    {
+        "distance" => RouteCriterion.Distance,
+        "transfers" => RouteCriterion.MinTransfers,
+        _ => RouteCriterion.Duration
+    };
+
     var options = new SmartTransit.Application.RouteOptions
     {
-        TransferPenaltyMinutes = request.TransferPenalty
+        Criterion = criterion,
+        TransferPenaltyMinutes = request.TransferPenalty,
+        StartWalkDistance = request.StartWalkDistance ?? 0,
+        EndWalkDistance = request.EndWalkDistance ?? 0
     };
 
     var routeRequest = new RouteRequest(startId, endId, options);
@@ -428,6 +438,8 @@ app.MapPost("/api/route", async (RouteApiRequest request, TransitGraph g, Dijkst
         totalDistance = totalDistance,
         totalDuration = totalDuration,
         transfers = transfers,
+        startWalkDistance = request.StartWalkDistance ?? 0,
+        endWalkDistance = request.EndWalkDistance ?? 0,
         found = true,
         stats = stats,
         compResult = new
@@ -444,4 +456,11 @@ app.Run();
 
 // API Model Classes
 public record KnnApiRequest(double X, double Y, int K);
-public record RouteApiRequest(string StartStopId, string EndStopId, string Algorithm, string Criterion, double TransferPenalty);
+public record RouteApiRequest(
+    string StartStopId,
+    string EndStopId,
+    string Algorithm,
+    string Criterion,
+    double TransferPenalty,
+    double? StartWalkDistance = null,
+    double? EndWalkDistance = null);

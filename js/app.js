@@ -18,20 +18,29 @@ class TransitApp {
         // Uygulama durumu
         this.mode = 'knn';              // 'knn' | 'route'
         this.algorithm = 'dijkstra';     // 'dijkstra' | 'astar'
-        this.criterion = 'duration';     // 'distance' | 'duration'
+        this.criterion = 'duration';     // 'distance' | 'duration' | 'transfers'
         this.kValue = 5;
         this.transferPenalty = 3;
         this.startStopId = null;
         this.endStopId = null;
+        this.startPoint = null;
+        this.endPoint = null;
+        this.apiBase = this.resolveApiBase();
 
-        // C# Backend API'den verileri çek ve uygulamayı başlat
         this.init();
+    }
+
+    /** Docker (8888) → nginx proxy; manuel → localhost:5099 */
+    resolveApiBase() {
+        const port = window.location.port;
+        if (port === '8888' || port === '80') return '';
+        return 'http://localhost:5099';
     }
 
     async init() {
         try {
             console.log('📡 C# Backend API bağlantısı kuruluyor...');
-            const response = await fetch('http://localhost:5099/api/data');
+            const response = await fetch(`${this.apiBase}/api/data`);
             this.cityData = await response.json();
             
             // Hızlı durak erişimi için yerel JS Map yapısını kullan
@@ -57,7 +66,7 @@ class TransitApp {
             console.log(`📊 ${this.cityData.stops.length} durak, ${this.cityData.lines.length} hat, ${this.cityData.edges.length} bağlantı yüklendi.`);
         } catch (error) {
             console.error('❌ C# API sunucusuna bağlanılamadı!', error);
-            alert('C# API sunucusuna bağlanılamadı (http://localhost:5099). Lütfen C# backend uygulamasının çalıştığından emin olun.');
+            alert('API sunucusuna bağlanılamadı. Docker: baslat-docker.bat veya dotnet run --project src/SmartTransit.Api');
         }
     }
 
@@ -178,7 +187,7 @@ class TransitApp {
         if (this.mode === 'knn') {
             this.performKnnSearch(mapPos);
         } else if (this.mode === 'route') {
-            this.handleRouteSelection(mapPos, sx, sy);
+            this.handleRouteSelection(mapPos);
         }
     }
     
@@ -205,7 +214,7 @@ class TransitApp {
     
     async performKnnSearch(mapPos) {
         try {
-            const response = await fetch('http://localhost:5099/api/knn', {
+            const response = await fetch(`${this.apiBase}/api/knn`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -286,65 +295,86 @@ class TransitApp {
     // ROTA HESAPLAMA
     // ============================================================
     
-    handleRouteSelection(mapPos, sx, sy) {
-        // Tıklanan yere en yakın durağı bul (C# verileri üzerinden mesafe hesaplayarak)
-        let nearestStop = null;
-        let minDist = Infinity;
-        for (const stop of this.cityData.stops) {
-            const dx = stop.x - mapPos.x;
-            const dy = stop.y - mapPos.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < minDist) {
-                minDist = dist;
-                nearestStop = stop;
-            }
-        }
-        
-        if (!nearestStop) return;
-        
-        const nearestStopId = nearestStop.id;
-        
+    async handleRouteSelection(mapPos) {
+        const nearest = await this.findNearestStop(mapPos);
+        if (!nearest) return;
+
+        const { stop, walkDistance } = nearest;
+
         if (!this.startStopId) {
-            // Başlangıç durağı seç
-            this.startStopId = nearestStopId;
+            this.startStopId = stop.id;
+            this.startPoint = { x: mapPos.x, y: mapPos.y, walkDistance, stopId: stop.id, stopName: stop.name };
+            this.endStopId = null;
+            this.endPoint = null;
+
+            this.renderer.setRouteEndpoints({ start: this.startPoint, end: null });
             this.renderer.setSelectedStops([this.startStopId]);
             this.renderer.setKnnResults([], null);
-            
-            document.getElementById('start-stop-name').textContent = nearestStop.name;
-            document.getElementById('end-stop-name').textContent = 'Haritaya tıklayın...';
-            
-            // Sonuçlar panelini güncelle
+            this.renderer.setRouteResult(null);
+
+            document.getElementById('start-stop-name').textContent = `${stop.name} (+${walkDistance.toFixed(0)}m yürüme)`;
+            document.getElementById('end-stop-name').textContent = 'Bitiş noktasına tıklayın...';
+
             const container = document.getElementById('results-content');
             container.innerHTML = `<div class="stats-box">
-                <div class="stats-title">🚏 Başlangıç Seçildi</div>
-                <div class="stats-row">
-                    <span>Durak:</span><span>${nearestStop.name}</span>
-                </div>
-                <p style="color:#94a3b8;font-size:12px;margin-top:10px;">
-                    Bitiş durağını seçmek için haritaya tıklayın.
-                </p>
+                <div class="stats-title">🟢 Başlangıç Noktası</div>
+                <div class="stats-row"><span>En yakın durak:</span><span>${stop.name}</span></div>
+                <div class="stats-row"><span>Yürüme mesafesi:</span><span>${walkDistance.toFixed(1)} birim</span></div>
+                <p style="color:#94a3b8;font-size:12px;margin-top:10px;">Hedef konuma tıklayın (KD-Tree KNN ile durak eşleştirilir).</p>
             </div>`;
             document.getElementById('results-panel').classList.add('visible');
-            
-        } else if (!this.endStopId) {
-            // Bitiş durağı seç
-            if (nearestStop.id === this.startStopId) return; // Aynı durağa tıklamayı engelle
-            
-            this.endStopId = nearestStop.id;
-            this.renderer.setSelectedStops([this.startStopId, this.endStopId]);
-            
-            document.getElementById('end-stop-name').textContent = nearestStop.name;
-            
-            // Rota hesapla
-            this.calculateRoute();
+            return;
         }
+
+        if (!this.endStopId) {
+            if (stop.id === this.startStopId && walkDistance < 5) return;
+
+            this.endStopId = stop.id;
+            this.endPoint = { x: mapPos.x, y: mapPos.y, walkDistance, stopId: stop.id, stopName: stop.name };
+
+            this.renderer.setRouteEndpoints({ start: this.startPoint, end: this.endPoint });
+            this.renderer.setSelectedStops([this.startStopId, this.endStopId]);
+
+            document.getElementById('end-stop-name').textContent = `${stop.name} (+${walkDistance.toFixed(0)}m yürüme)`;
+            await this.calculateRoute();
+        }
+    }
+
+    /** KD-Tree KNN (k=1) — rubrik: spatial tree üzerinden en yakın durak */
+    async findNearestStop(mapPos) {
+        try {
+            const resp = await fetch(`${this.apiBase}/api/knn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ x: mapPos.x, y: mapPos.y, k: 1 })
+            });
+            const data = await resp.json();
+            if (data.results?.length > 0) {
+                const r = data.results[0];
+                const stop = this.stopsMap.get(r.id);
+                if (stop) return { stop, walkDistance: r.distance };
+            }
+        } catch (e) {
+            console.warn('KNN fallback:', e);
+        }
+
+        let nearestStop = null;
+        let minDist = Infinity;
+        for (const s of this.cityData.stops) {
+            const dist = Math.hypot(s.x - mapPos.x, s.y - mapPos.y);
+            if (dist < minDist) {
+                minDist = dist;
+                nearestStop = s;
+            }
+        }
+        return nearestStop ? { stop: nearestStop, walkDistance: minDist } : null;
     }
     
     async calculateRoute() {
         if (!this.startStopId || !this.endStopId) return;
         
         try {
-            const response = await fetch('http://localhost:5099/api/route', {
+            const response = await fetch(`${this.apiBase}/api/route`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -352,7 +382,9 @@ class TransitApp {
                     endStopId: this.endStopId,
                     algorithm: this.algorithm,
                     criterion: this.criterion,
-                    transferPenalty: this.transferPenalty
+                    transferPenalty: this.transferPenalty,
+                    startWalkDistance: this.startPoint?.walkDistance ?? 0,
+                    endWalkDistance: this.endPoint?.walkDistance ?? 0
                 })
             });
             const result = await response.json();
@@ -398,13 +430,17 @@ class TransitApp {
             <div class="stats-title">🗺️ Rota Bulundu!</div>
             <div class="stats-row highlight">
                 <span>Toplam Maliyet:</span>
-                <span>${result.totalCost.toFixed(1)} ${this.criterion === 'distance' ? 'birim' : 'dk'}</span>
+                <span>${result.totalCost.toFixed(1)} ${this.criterion === 'distance' ? 'birim' : this.criterion === 'transfers' ? 'puan' : 'dk'}</span>
             </div>
             <div class="stats-row">
                 <span>Toplam Mesafe:</span><span>${result.totalDistance.toFixed(0)} birim</span>
             </div>
             <div class="stats-row">
                 <span>Toplam Süre:</span><span>${result.totalDuration.toFixed(1)} dk</span>
+            </div>
+            <div class="stats-row">
+                <span>Yürüme (başlangıç / bitiş):</span>
+                <span>${(result.startWalkDistance ?? this.startPoint?.walkDistance ?? 0).toFixed(0)} / ${(result.endWalkDistance ?? this.endPoint?.walkDistance ?? 0).toFixed(0)} birim</span>
             </div>
             <div class="stats-row">
                 <span>Durak Sayısı:</span><span>${result.path.length}</span>
@@ -709,7 +745,7 @@ class TransitApp {
             </div>
             <div class="ds-stat-item">
                 <div class="ds-stat-name">📊 Min-Heap (C#)</div>
-                <div class="ds-stat-detail">Dijkstra/A* sırasında backend'de kullanılır</div>
+                <div class="ds-stat-detail">Özel MinHeap — Push/Pop O(log n), Dijkstra & A*</div>
             </div>
         `;
     }
@@ -744,6 +780,8 @@ class TransitApp {
     clearResults() {
         this.startStopId = null;
         this.endStopId = null;
+        this.startPoint = null;
+        this.endPoint = null;
         this.renderer.clearAll();
         
         document.getElementById('start-stop-name').textContent = '-';
@@ -763,12 +801,15 @@ class TransitApp {
         const knnControls = document.getElementById('knn-controls');
         const routeControls = document.getElementById('route-controls');
         
+        const instructions = document.getElementById('map-instructions');
         if (this.mode === 'knn') {
             knnControls.style.display = 'block';
             routeControls.style.display = 'none';
+            if (instructions) instructions.textContent = '📍 Haritaya tıklayın — KD-Tree ile en yakın K durak bulunur';
         } else {
             knnControls.style.display = 'none';
             routeControls.style.display = 'block';
+            if (instructions) instructions.textContent = '🗺️ Sırayla başlangıç ve bitiş noktasına tıklayın (yürüme + toplu taşıma rotası)';
         }
     }
 }

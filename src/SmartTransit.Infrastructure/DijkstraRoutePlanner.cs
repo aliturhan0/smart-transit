@@ -5,7 +5,6 @@ namespace SmartTransit.Infrastructure;
 
 public sealed class DijkstraRoutePlanner : IRoutePlanner
 {
-    // Code Defense gereksinimi: Geliştirici imzası
     public string DeveloperTugceAdisen => "Tugce Adisen";
 
     public RouteResult FindShortestPath(TransitGraph graph, RouteRequest request)
@@ -17,22 +16,20 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
 
         var options = request.Options ?? new RouteOptions();
         var start = new RouteState(request.StartStopId, null);
-        var distances = new Dictionary<RouteState, double> { [start] = 0 };
+        var startCost = RouteCostCalculator.WalkingCost(options.StartWalkDistance, options);
+        var distances = new Dictionary<RouteState, double> { [start] = startCost };
         var previous = new Dictionary<RouteState, (RouteState PrevState, TransitEdge Edge)>();
-        var queue = new PriorityQueue<RouteState, double>();
+        var queue = new MinHeap<RouteState>();
 
-        // İstatistik sayaçları
         int nodesVisited = 0;
         int edgesExamined = 0;
-        int heapInsertions = 0;
 
-        queue.Enqueue(start, 0);
-        heapInsertions++;
+        queue.Push(start, startCost);
 
         RouteState? bestEndState = null;
         double bestEndCost = double.PositiveInfinity;
 
-        while (queue.TryDequeue(out var current, out var cost))
+        while (queue.TryPop(out var current, out var cost))
         {
             nodesVisited++;
 
@@ -41,10 +38,14 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
                 continue;
             }
 
-            if (current.StopId == request.EndStopId && cost < bestEndCost)
+            if (current.StopId == request.EndStopId)
             {
-                bestEndState = current;
-                bestEndCost = cost;
+                var totalWithEndWalk = cost + RouteCostCalculator.WalkingCost(options.EndWalkDistance, options);
+                if (totalWithEndWalk < bestEndCost)
+                {
+                    bestEndState = current;
+                    bestEndCost = totalWithEndWalk;
+                }
             }
 
             if (!graph.Adjacency.TryGetValue(current.StopId, out var edges))
@@ -55,23 +56,14 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
             foreach (var edge in edges)
             {
                 edgesExamined++;
-
-                var transferPenalty = 0d;
-                if (current.CurrentLineId is not null && current.CurrentLineId != edge.LineId)
-                {
-                    transferPenalty = options.TransferPenaltyMinutes;
-                }
-
-                var walkPenalty = (edge.DistanceMeters / 100d) * options.WalkPenaltyPer100Meters;
-                var nextCost = cost + edge.TravelMinutes + walkPenalty + transferPenalty;
+                var nextCost = cost + RouteCostCalculator.EdgeCost(edge, options, current.CurrentLineId);
                 var nextState = new RouteState(edge.ToStopId, edge.LineId);
 
                 if (!distances.TryGetValue(nextState, out var oldCost) || nextCost < oldCost)
                 {
                     distances[nextState] = nextCost;
                     previous[nextState] = (current, edge);
-                    queue.Enqueue(nextState, nextCost);
-                    heapInsertions++;
+                    queue.Push(nextState, nextCost);
                 }
             }
         }
@@ -81,7 +73,7 @@ public sealed class DijkstraRoutePlanner : IRoutePlanner
             throw new InvalidOperationException("No route could be found between the selected stops.");
         }
 
-        return BuildResult(previous, bestEndState, bestEndCost, nodesVisited, edgesExamined, heapInsertions);
+        return BuildResult(previous, bestEndState, bestEndCost, nodesVisited, edgesExamined, queue.PushCount);
     }
 
     private static RouteResult BuildResult(

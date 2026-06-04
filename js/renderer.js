@@ -60,6 +60,7 @@ export class MapRenderer {
         this.knnResults = [];           // KNN sonuçları
         this.knnQueryPoint = null;      // KNN sorgu noktası
         this.routeResult = null;        // Hesaplanan rota
+        this.routeEndpoints = null;     // { start, end } harita tıklama + yürüme
         
         // Araç simülasyonu
         this.vehicles = [];
@@ -198,6 +199,11 @@ export class MapRenderer {
         // Hat güzergahları
         this.drawLines();
         
+        // Yürüme bacakları (kullanıcı konumu → durak)
+        if (this.routeEndpoints) {
+            this.drawWalkLegs();
+        }
+
         // Rota
         if (this.routeResult && this.routeResult.found) {
             this.drawRoute();
@@ -481,6 +487,51 @@ export class MapRenderer {
         ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#fbbf24';
         ctx.fill();
+    }
+
+    /**
+     * Başlangıç/bitiş tıklama noktasından en yakın durağa yürüme çizgisi
+     */
+    drawWalkLegs() {
+        const ctx = this.ctx;
+        const ep = this.routeEndpoints;
+        if (!ep) return;
+
+        const drawLeg = (point, color, label) => {
+            if (!point) return;
+            const stop = this.stopsMap.get(point.stopId);
+            if (!stop) return;
+
+            const clickP = this.mapToScreen(point.x, point.y);
+            const stopP = this.mapToScreen(stop.x, stop.y);
+
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(clickP.x, clickP.y);
+            ctx.lineTo(stopP.x, stopP.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.beginPath();
+            ctx.arc(clickP.x, clickP.y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.font = 'bold 10px Inter, sans-serif';
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.fillText(label, clickP.x, clickP.y - 14);
+            ctx.restore();
+        };
+
+        drawLeg(ep.start, '#22c55e', 'BAŞLANGIÇ');
+        drawLeg(ep.end, '#ef4444', 'BİTİŞ');
     }
 
     /**
@@ -848,10 +899,15 @@ export class MapRenderer {
         }
     }
 
+    setRouteEndpoints(endpoints) {
+        this.routeEndpoints = endpoints;
+    }
+
     clearAll() {
         this.knnResults = [];
         this.knnQueryPoint = null;
         this.routeResult = null;
+        this.routeEndpoints = null;
         this.selectedStops = [];
         this._knnResultIds = new Set();
         this._routePathIds = new Set();
