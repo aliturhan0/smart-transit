@@ -14,7 +14,7 @@
 ---
 
 ## 👥 Proje Geliştirme Ekibi (Grup 5)
-- **Ali Turhan:** Uzamsal Veri Yapıları, Arayüz Geliştirme, Sistem Entegrasyonu
+- **Ali Turhan:** Uzamsal Veri Yapıları (KD-Tree), K-Nearest Neighbors (KNN) Algoritması, Graf Modelleme, Arayüz Geliştirme (Canvas/JS), Docker Sistem Entegrasyonu
 - **Tuğçe Adışen:** Veri Arama Algoritmaları, Dijkstra Rotalama Optimizasyonu
 - **Mehmet Çetin:** Ağ Modellemesi, A* (A-Star) Algoritması, Heuristik Hesaplamalar
 
@@ -76,3 +76,9 @@ Farklı bilgisayarlarda yaşanan "bende çalışıyordu, sende neden bozuldu" so
 Projenin C# Backend, Python AI Servisi ve Javascript Frontend arayüzü birbirinden izole konteynerler (mini sunucular) halinde tek bir komutla çalışmaktadır. Kurulumla uğraşmadan sistemi denemek için aşağıdaki rehbere göz atabilirsiniz:
 
 👉 **[Tıklayın: KURULUM VE ÇALIŞTIRMA REHBERİ (KURULUM_REHBERI.md)](KURULUM_REHBERI.md)**
+
+---
+
+<div align="right">
+  <sub>🎥 Proje Sunum Videosu: <a href="https://youtu.be/vOyaaWRLBZE">YouTube Üzerinden İzleyin</a></sub>
+</div>
