@@ -14,7 +14,7 @@
 ---
 
 ## 👥 Proje Geliştirme Ekibi (Grup 5)
-- **Ali Turhan:** Uzamsal Veri Yapıları (KD-Tree), K-Nearest Neighbors (KNN) Algoritması, Graf Modelleme, Arayüz Geliştirme (Canvas/JS), Docker Sistem Entegrasyonu
+- **Ali Turhan:** Uzamsal Veri Yapıları , K-Nearest Neighbors (KNN) Algoritması, Graf Modelleme, Arayüz Geliştirme , Docker Sistem Entegrasyonu
 - **Tuğçe Adışen:** Veri Arama Algoritmaları, Dijkstra Rotalama Optimizasyonu
 - **Mehmet Çetin:** Ağ Modellemesi, A* (A-Star) Algoritması, Heuristik Hesaplamalar
 
