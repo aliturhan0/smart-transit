@@ -64,6 +64,51 @@ Kullanıcının saniyeler içinde gördüğü bu akıcı deneyim, arka planda C#
 2. **Karma Tablolar (Hash Table):** Durakların ve hatların bilgilerine, tıpkı bir sözlükten kelime bulur gibi anında (O(1) hızında) erişilir.
 3. **Graf ve Yönlendirme Algoritmaları:** Şehir ağı bir **Multigraph** olarak tasarlanmıştır. Hedefe giden en kısa yolu bulmak için dünyaca ünlü **Dijkstra** ve **A* (A-Star)** algoritmaları kullanılmıştır.
 
+### 🧩 Veri Yapıları UML Sınıf Diyagramı
+Projenin temelini oluşturan özgün veri yapılarının mimarisi ve birbirleriyle ilişkisi:
+
+```mermaid
+classDiagram
+    class TransitGraph {
+        -Dictionary Stops
+        -Dictionary AdjacencyList
+        +AddStop(Stop stop)
+        +AddEdge(int fromId, int toId, double distance, double time, string line)
+    }
+
+    class KdTree {
+        -KdTreeNode _root
+        +Insert(Stop point)
+        +Knn(double lat, double lon, int k)
+    }
+
+    class HashTable~TKey, TValue~ {
+        -int _capacity
+        -List[] _buckets
+        +Put(TKey key, TValue value)
+        +Get(TKey key)
+    }
+
+    class MinHeap~T~ {
+        -List _elements
+        +Push(T item)
+        +Pop() T
+    }
+
+    class Stop {
+        +int Id
+        +string Name
+        +double Latitude
+        +double Longitude
+    }
+
+    TransitGraph "1" *-- "many" Stop : contains
+    KdTree "1" *-- "many" Stop : spatial index
+    TransitGraph ..> HashTable : uses for O(1) lookup
+    AStarRoutePlanner ..> MinHeap : uses for priority queue
+    DijkstraRoutePlanner ..> MinHeap : uses for priority queue
+```
+
 ### 📊 Algoritma Karşılaştırma Modülü
 Kullanıcı bir rota oluşturduğunda, arayüzün sağ tarafında bir istatistik paneli açılır. Bu panelde Dijkstra ve A* algoritmalarının bu rotayı bulmak için ne kadar uğraştığı (kaç düğüm ziyaret ettikleri, kaç milisaniye harcadıkları) bar grafikleriyle karşılaştırmalı olarak kullanıcıya gösterilir. A*'ın sezgisel (kuş uçuşu) tahmin yeteneği sayesinde çoğu zaman Dijkstra'dan çok daha az işlem yaparak aynı sonuca ulaştığı görsel olarak kanıtlanır.
 
